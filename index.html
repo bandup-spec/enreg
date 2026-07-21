@@ -3129,13 +3129,65 @@ async function downloadTemplatePreview() {
     [['front', frontCanvas], ['back', backCanvas]].forEach(([side, canvas]) => {
       const link = document.createElement('a');
       link.download = `id_card_preview_${safeId}_${side}.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.href = pngWithPhysicalSize(canvas.toDataURL('image/png'), 58, 88);
       link.click();
     });
     toast('Preview downloaded — remember to Save Template to make it official.', 'success');
   } catch (e) {
     toast('Could not generate the preview image.', 'error');
   }
+}
+
+// ── PNG PHYSICAL SIZE FIX ────────────────────────────────────────────────
+// canvas.toDataURL('image/png') bakes in pixels only — no physical size.
+// Most viewers/printers then fall back to guessing 96dpi, which turns our
+// ~685×1039px card into a ~181×275mm printout instead of the real 58×88mm.
+// This embeds a PNG pHYs chunk stating the exact DPI implied by the canvas
+// vs. the real 58×88mm card, so "print at actual size" comes out correct
+// wherever the file is opened.
+function crc32(bytes) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) {
+    crc ^= bytes[i];
+    for (let k = 0; k < 8; k++) crc = (crc & 1) ? (0xEDB88320 ^ (crc >>> 1)) : (crc >>> 1);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+function pngWithPhysicalSize(dataUri, widthMm, heightMm) {
+  const base64 = dataUri.split(',')[1];
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+  // Pixel dimensions live in the IHDR chunk (bytes 16-23: width, height).
+  const dv = new DataView(bytes.buffer);
+  const pxW = dv.getUint32(16);
+  const pxH = dv.getUint32(20);
+  const pxPerMeterX = Math.round(pxW / (widthMm  / 1000));
+  const pxPerMeterY = Math.round(pxH / (heightMm / 1000));
+
+  const type = [0x70, 0x48, 0x59, 0x73]; // 'pHYs'
+  const data = new Uint8Array(9);
+  const ddv  = new DataView(data.buffer);
+  ddv.setUint32(0, pxPerMeterX);
+  ddv.setUint32(4, pxPerMeterY);
+  data[8] = 1; // unit specifier: 1 = per meter
+
+  const body = new Uint8Array([...type, ...data]);
+  const crc  = crc32(body);
+  const lenBytes = new Uint8Array(4); new DataView(lenBytes.buffer).setUint32(0, 9);
+  const crcBytes = new Uint8Array(4); new DataView(crcBytes.buffer).setUint32(0, crc);
+  const physChunk = new Uint8Array([...lenBytes, ...body, ...crcBytes]);
+
+  const insertPos = 8 + 25; // PNG signature (8) + IHDR chunk (4+4+13+4=25)
+  const out = new Uint8Array(bytes.length + physChunk.length);
+  out.set(bytes.slice(0, insertPos), 0);
+  out.set(physChunk, insertPos);
+  out.set(bytes.slice(insertPos), insertPos + physChunk.length);
+
+  let binOut = '';
+  for (let i = 0; i < out.length; i++) binOut += String.fromCharCode(out[i]);
+  return 'data:image/png;base64,' + btoa(binOut);
 }
 
 // Populates the offscreen #idCardTemplate with a given student's FRONT design
@@ -3215,7 +3267,7 @@ async function downloadIdCard(format) {
       [['front', frontCanvas], ['back', backCanvas]].forEach(([side, canvas]) => {
         const link = document.createElement('a');
         link.download = `id_card_${safeId}_${side}.png`;
-        link.href = canvas.toDataURL('image/png');
+        link.href = pngWithPhysicalSize(canvas.toDataURL('image/png'), 58, 88);
         link.click();
       });
     } else {
