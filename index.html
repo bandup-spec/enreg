@@ -158,17 +158,24 @@
   .login-visual {
     position: relative; overflow: hidden; color: #fff; padding: 56px 52px;
     display: flex; flex-direction: column; justify-content: center;
-    background: linear-gradient(160deg, #0F172A 0%, #1E293B 46%, #0F172A 100%);
+    background: linear-gradient(160deg, #071A3D 0%, #123B82 55%, #1C86C4 100%);
   }
+  /* Two large soft-edged curves sweeping across the panel — a plain
+     geometric echo of the ID card's gradient-curve design, with no logo
+     or text baked into it. */
   .login-visual::before {
-    content: ''; position: absolute; inset: 0; opacity: .5; pointer-events: none;
-    background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
-    background-size: 44px 44px;
-    mask-image: radial-gradient(circle at 30% 35%, black, transparent 72%);
+    content: ''; position: absolute; pointer-events: none;
+    width: 1100px; height: 1100px; border-radius: 50%;
+    right: -600px; bottom: -620px;
+    background: linear-gradient(135deg, #1B4F94 0%, #2496CE 100%);
+    opacity: .9;
   }
   .login-visual::after {
-    content: ''; position: absolute; inset: 0; pointer-events: none;
-    background: radial-gradient(circle at 18% 15%, rgba(37,99,235,.2), transparent 45%), radial-gradient(circle at 88% 88%, rgba(29,78,216,.16), transparent 50%);
+    content: ''; position: absolute; pointer-events: none;
+    width: 900px; height: 900px; border-radius: 50%;
+    right: -560px; bottom: -660px;
+    background: linear-gradient(135deg, #0C2760 0%, #1B6FAE 100%);
+    opacity: .65;
   }
   .login-visual-content { position: relative; z-index: 1; max-width: 440px; }
   .login-eyebrow { display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16); color: #BFDBFE; font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; padding: 6px 13px; border-radius: 20px; margin-bottom: 22px; }
@@ -195,6 +202,9 @@
   .login-alt { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted); line-height: 1.5; }
   .login-alt a { color: var(--accent-dk); font-weight: 700; text-decoration: none; }
   .login-alt a:hover { text-decoration: underline; }
+  .login-divider { display: flex; align-items: center; gap: 12px; margin: 22px 0 18px; font-size: 12px; color: var(--muted); }
+  .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .student-login-form { text-align: left; }
   .app-shell { display: none; }
   .app-shell.ready { display: block; }
   .user-chip { display: flex; align-items: center; gap: 8px; }
@@ -402,7 +412,22 @@
         <div class="login-sub">Sign in with your authorized school Google account to continue.</div>
         <div class="login-btn-wrap" id="gsiButtonWrap"></div>
         <div class="login-msg" id="loginMsg"></div>
-        <div class="login-alt">Are you a student looking for your own profile, classmates, or school announcements?<br><a href="profile.html">Go to the Student Hub →</a></div>
+
+        <div class="login-divider"><span>or sign in as a student</span></div>
+
+        <form class="student-login-form" onsubmit="event.preventDefault(); studentPasswordLogin();">
+          <div class="field" style="text-align:left;margin-bottom:10px;">
+            <label>Student ID</label>
+            <input type="text" id="stuLoginId" placeholder="e.g. 122" autocomplete="username">
+          </div>
+          <div class="field" style="text-align:left;margin-bottom:6px;">
+            <label>Password</label>
+            <input type="password" id="stuLoginPass" placeholder="Enter or create your password" autocomplete="current-password">
+          </div>
+          <span class="field-hint" style="display:block;text-align:left;margin-bottom:14px;">First time signing in? Just type your Student ID and any password — it becomes your password from then on.</span>
+          <button type="submit" class="btn btn-primary" style="width:100%;" id="stuLoginBtn">Sign In</button>
+        </form>
+        <div class="login-msg" id="stuLoginMsg"></div>
       </div>
     </div>
   </div>
@@ -519,9 +544,9 @@
           <div class="field"><label>Photo Top</label><input type="number" id="tmplPhotoTop" value="39"></div>
           <div class="field"><label>Photo Left</label><input type="number" id="tmplPhotoLeft" value="50"></div>
           <div class="field"><label>Photo Size</label><input type="number" id="tmplPhotoSize" value="65"></div>
-          <div class="field"><label>Name Top</label><input type="number" id="tmplNameTop" value="60"></div>
-          <div class="field"><label>Name Font Size</label><input type="number" id="tmplNameSize" value="24"></div>
-          <div class="field"><label>ID Number Top</label><input type="number" id="tmplIdTop" value="76"></div>
+          <div class="field"><label>Name Top</label><input type="number" id="tmplNameTop" value="62"></div>
+          <div class="field"><label>Name Font Size</label><input type="number" id="tmplNameSize" value="22"></div>
+          <div class="field"><label>ID Number Top</label><input type="number" id="tmplIdTop" value="77"></div>
           <div class="field"><label>ID Font Size</label><input type="number" id="tmplIdSize" value="12"></div>
         </div>
         <span class="field-hint">Click "Preview" to check placement on screen before saving.</span>
@@ -531,7 +556,7 @@
         <label style="font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Origin School / Descriptor Line</label>
         <span class="field-hint" style="display:block;margin-bottom:8px;">The line under the student's name (e.g. "Tokyo Gakkan High Student"). Works for camp AND regular students — set per student in Add/Edit Record.</span>
         <div class="tmpl-pos-grid">
-          <div class="field"><label>Descriptor Top</label><input type="number" id="tmplDescTop" value="68"></div>
+          <div class="field"><label>Descriptor Top</label><input type="number" id="tmplDescTop" value="69"></div>
           <div class="field"><label>Descriptor Font Size</label><input type="number" id="tmplDescSize" value="16"></div>
         </div>
         <div class="field" style="margin-top:12px;">
@@ -1132,6 +1157,51 @@ async function handleCredentialResponse(response) {
 
   loadRecords(); // re-runs the full render pipeline (sorting, filters, dropdowns, etc.)
   loadSchools();
+}
+
+// Student ID + Password sign-in — the second option on the same login
+// screen (no separate "go to Student Hub" click needed). On success we
+// stash the credentials in sessionStorage so profile.html (the Student
+// Hub) can sign the student straight in there too, then hand off to it —
+// this admin app has no student-facing views of its own.
+async function studentPasswordLogin() {
+  const studentId       = document.getElementById('stuLoginId').value.trim();
+  const studentPassword = document.getElementById('stuLoginPass').value;
+  const msgEl = document.getElementById('stuLoginMsg');
+  const btn   = document.getElementById('stuLoginBtn');
+
+  if (!studentId || !studentPassword) {
+    msgEl.textContent = 'Please enter your Student ID and password.';
+    msgEl.className = 'login-msg show error';
+    return;
+  }
+
+  msgEl.className = 'login-msg';
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+
+  try {
+    const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'studentLogin', studentId, studentPassword }) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      sessionStorage.setItem('studentAuth', JSON.stringify({ studentId, studentPassword }));
+      msgEl.textContent = data.isNewPassword
+        ? 'Password created! Taking you to your Student Hub…'
+        : 'Welcome back! Taking you to your Student Hub…';
+      msgEl.className = 'login-msg show info';
+      setTimeout(() => { window.location.href = 'profile.html'; }, 900);
+    } else {
+      msgEl.textContent = data.message || 'Invalid Student ID or password.';
+      msgEl.className = 'login-msg show error';
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+    }
+  } catch (e) {
+    msgEl.textContent = 'Connection error. Please try again.';
+    msgEl.className = 'login-msg show error';
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
 }
 
 function handleLogout() {
@@ -2863,24 +2933,24 @@ function loadTemplateIntoForm() {
     document.getElementById('tmplPhotoLeft').value = t.photoLeft;
     document.getElementById('tmplPhotoSize').value = t.photoSize;
     document.getElementById('tmplNameTop').value   = t.nameTop;
-    document.getElementById('tmplNameSize').value  = t.nameSize  != null ? t.nameSize  : 15;
+    document.getElementById('tmplNameSize').value  = t.nameSize  != null ? t.nameSize  : 22;
     document.getElementById('tmplIdTop').value     = t.idTop;
-    document.getElementById('tmplIdSize').value    = t.idSize    != null ? t.idSize    : 11;
-    document.getElementById('tmplDescTop').value   = t.descriptorTop  != null ? t.descriptorTop  : 66;
-    document.getElementById('tmplDescSize').value  = t.descriptorSize != null ? t.descriptorSize : 11;
+    document.getElementById('tmplIdSize').value    = t.idSize    != null ? t.idSize    : 12;
+    document.getElementById('tmplDescTop').value   = t.descriptorTop  != null ? t.descriptorTop  : 69;
+    document.getElementById('tmplDescSize').value  = t.descriptorSize != null ? t.descriptorSize : 16;
     document.getElementById('tmplDescFont').value  = t.descriptorFont || 'DM Sans';
     updateFontPreview();
   } else {
     wrap.style.display = 'none';
-    document.getElementById('tmplPhotoTop').value  = 24;
+    document.getElementById('tmplPhotoTop').value  = 39;
     document.getElementById('tmplPhotoLeft').value = 50;
-    document.getElementById('tmplPhotoSize').value = 52;
+    document.getElementById('tmplPhotoSize').value = 65;
     document.getElementById('tmplNameTop').value   = 62;
-    document.getElementById('tmplNameSize').value  = 15;
-    document.getElementById('tmplIdTop').value     = 68;
-    document.getElementById('tmplIdSize').value    = 11;
-    document.getElementById('tmplDescTop').value   = 66;
-    document.getElementById('tmplDescSize').value  = 11;
+    document.getElementById('tmplNameSize').value  = 22;
+    document.getElementById('tmplIdTop').value     = 77;
+    document.getElementById('tmplIdSize').value    = 12;
+    document.getElementById('tmplDescTop').value   = 69;
+    document.getElementById('tmplDescSize').value  = 16;
     document.getElementById('tmplDescFont').value  = 'DM Sans';
     updateFontPreview();
   }
@@ -2916,15 +2986,15 @@ function handleTemplateUpload(e) {
 
 function readTemplateFormValues() {
   return {
-    photoTop:  parseFloat(document.getElementById('tmplPhotoTop').value)  || 24,
+    photoTop:  parseFloat(document.getElementById('tmplPhotoTop').value)  || 39,
     photoLeft: parseFloat(document.getElementById('tmplPhotoLeft').value) || 50,
-    photoSize: parseFloat(document.getElementById('tmplPhotoSize').value) || 52,
+    photoSize: parseFloat(document.getElementById('tmplPhotoSize').value) || 65,
     nameTop:   parseFloat(document.getElementById('tmplNameTop').value)   || 62,
-    nameSize:  parseFloat(document.getElementById('tmplNameSize').value)  || 15,
-    idTop:     parseFloat(document.getElementById('tmplIdTop').value)     || 68,
-    idSize:    parseFloat(document.getElementById('tmplIdSize').value)    || 11,
-    descriptorTop:  parseFloat(document.getElementById('tmplDescTop').value)  || 66,
-    descriptorSize: parseFloat(document.getElementById('tmplDescSize').value) || 11,
+    nameSize:  parseFloat(document.getElementById('tmplNameSize').value)  || 22,
+    idTop:     parseFloat(document.getElementById('tmplIdTop').value)     || 77,
+    idSize:    parseFloat(document.getElementById('tmplIdSize').value)    || 12,
+    descriptorTop:  parseFloat(document.getElementById('tmplDescTop').value)  || 69,
+    descriptorSize: parseFloat(document.getElementById('tmplDescSize').value) || 16,
     descriptorFont: document.getElementById('tmplDescFont').value.trim() || 'DM Sans',
   };
 }
@@ -2974,12 +3044,12 @@ function renderCardTemplate(tmpl, data) {
         photoWrap.style.top    = (h * tmpl.photoTop  / 100) + 'px';
         photoWrap.style.left   = (w * tmpl.photoLeft / 100) + 'px';
         nameEl.style.top = (h * tmpl.nameTop / 100) + 'px';
-        nameEl.style.fontSize = (tmpl.nameSize || 15) + 'px';
-        descEl.style.top = (h * (tmpl.descriptorTop != null ? tmpl.descriptorTop : 66) / 100) + 'px';
-        descEl.style.fontSize = (tmpl.descriptorSize || 11) + 'px';
+        nameEl.style.fontSize = (tmpl.nameSize || 22) + 'px';
+        descEl.style.top = (h * (tmpl.descriptorTop != null ? tmpl.descriptorTop : 69) / 100) + 'px';
+        descEl.style.fontSize = (tmpl.descriptorSize || 16) + 'px';
         descEl.style.fontFamily = `'${descFont}', sans-serif`;
         idEl.style.top   = (h * tmpl.idTop   / 100) + 'px';
-        idEl.style.fontSize = (tmpl.idSize || 11) + 'px';
+        idEl.style.fontSize = (tmpl.idSize || 12) + 'px';
         resolve();
       };
       bg.src = tmpl.image;
