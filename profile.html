@@ -5,7 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Student Hub</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  /* ── ID card offscreen renderer (for "Download My ID Card") ──────────────
+     Ported from the admin app's image-mode template rendering — the photo/
+     name/ID/descriptor are overlaid at % positions onto the school's
+     uploaded card design, fetched from the backend (getIdCardTemplates)
+     so it works the same regardless of which device/browser is used. */
+  #idCardTemplate { position: fixed; top: -9999px; left: -9999px; width: 274px; height: 416px; overflow: hidden; font-family: 'DM Sans', sans-serif; background: #ffffff; }
+  #idCardTemplate .idc-bg-img { display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+  #idCardTemplate .idc-photo-wrap { position: absolute; margin: 0; transform: translate(-50%, -50%); z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,.2); border-radius: 50%; background: #fff; }
+  #idCardTemplate .idc-photo { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #EEF2F5; display: block; }
+  #idCardTemplate .idc-photo-placeholder { width: 100%; height: 100%; border-radius: 50%; background: #EEF2F5; display: flex; align-items: center; justify-content: center; font-size: 40px; color: #9CA3AF; }
+  #idCardTemplate .idc-name, #idCardTemplate .idc-descriptor, #idCardTemplate .idc-id { position: absolute; left: 0; width: 100%; margin: 0; z-index: 2; text-align: center; }
+  #idCardTemplate .idc-name { font-weight: 800; color: #111; text-decoration: underline; padding: 0 10px; }
+  #idCardTemplate .idc-descriptor { font-weight: 600; color: #222; padding: 0 10px; }
+  #idCardTemplate .idc-id { font-weight: 700; color: #111; }
+</style>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -347,6 +364,9 @@
     <div class="tab-panel" id="panel-classmates">
       <div class="classmates-toolbar">
         <input type="text" class="search-input" id="classSearch" placeholder="Search by name, course, or campus…" oninput="renderClassmates()">
+        <select id="classCampusFilter" onchange="renderClassmates()" style="padding:8px 12px;border:1px solid var(--border-dk);border-radius:var(--radius);font-size:13px;background:var(--surface);">
+          <option value="">All Campuses</option>
+        </select>
       </div>
       <div class="classmates-grid" id="classmatesGrid"></div>
     </div>
@@ -379,6 +399,14 @@
 </div>
 
 <div id="toastWrap"></div>
+
+<div id="idCardTemplate" class="idc-imgmode" aria-hidden="true">
+  <img id="idcBgImg" class="idc-bg-img" src="" alt="">
+  <div id="idcPhotoWrap" class="idc-photo-wrap"></div>
+  <div id="idcName" class="idc-name"></div>
+  <div id="idcDescriptor" class="idc-descriptor"></div>
+  <div id="idcId" class="idc-id"></div>
+</div>
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────
@@ -483,6 +511,7 @@ async function handleCredentialResponse(response) {
   document.getElementById('userName').textContent = claims.name || claims.email || '';
 
   await Promise.all([loadMyRecord(), loadAnnouncements()]);
+  populateCampusFilter();
   renderClassmates();
 
   document.getElementById('loginOverlay').classList.add('hidden');
@@ -522,6 +551,7 @@ async function enterAsStudent(studentId, studentPassword) {
   sessionStorage.setItem('studentAuth', JSON.stringify({ studentId, studentPassword }));
 
   await Promise.all([loadMyRecord(), loadAnnouncements()]);
+  populateCampusFilter();
   renderClassmates();
 
   document.getElementById('userAvatar').src = (myRecord && myRecord.photo) || '';
@@ -814,6 +844,17 @@ function renderMyProfilePanel() {
     </div>
 
     <div class="card" style="margin-top:18px;">
+      <div class="card-header"><div class="card-title">My ID Card</div><div class="card-sub">Your official student ID, ready to download and print at its real size (58×88mm).</div></div>
+      <div class="card-body">
+        <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+          <img id="idc_preview" src="" alt="" style="width:140px;border-radius:10px;box-shadow:var(--shadow);display:none;background:var(--bg);">
+          <div id="idc_placeholder" class="ro-value" style="color:var(--muted);">Loading your card…</div>
+          <button class="btn btn-primary" id="idc_downloadBtn" onclick="downloadMyIdCard()" style="display:none;">⬇ Download My ID Card (PNG)</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
       <div class="card-header"><div class="card-title">Enrollment Info</div><div class="card-sub">Managed by the school — contact your admin to make changes.</div></div>
       <div class="card-body">
         <div class="readonly-grid">
@@ -823,9 +864,33 @@ function renderMyProfilePanel() {
           <div class="ro-item"><div class="ro-label">Date Ended</div><div class="ro-value">${escapeHtml(myRecord.dateEnded || '—')}</div></div>
           <div class="ro-item"><div class="ro-label">Graduation</div><div class="ro-value">${escapeHtml(myRecord.dateGrad || '—')}</div></div>
           <div class="ro-item"><div class="ro-label">Origin School</div><div class="ro-value">${escapeHtml(myRecord.originSchool || '—')}</div></div>
+          <div class="ro-item"><div class="ro-label">Last Updated</div><div class="ro-value">${myRecord.lastEditedAt ? escapeHtml(myRecord.lastEditedAt) + (myRecord.lastEditedBy ? ' · ' + escapeHtml(myRecord.lastEditedBy) : '') : '—'}</div></div>
         </div>
       </div>
-    </div>`;
+    </div>
+
+    ${currentStudentAuth ? `
+    <div class="card" style="margin-top:18px;">
+      <div class="card-header"><div class="card-title">Account Security</div><div class="card-sub">Change the password you use to sign in with your Student ID.</div></div>
+      <div class="card-body">
+        <div class="form-row-2">
+          <div class="field">
+            <label>New Password</label>
+            <input type="password" id="pw_new" placeholder="At least 4 characters" autocomplete="new-password">
+          </div>
+          <div class="field">
+            <label>Confirm New Password</label>
+            <input type="password" id="pw_confirm" placeholder="Re-type new password" autocomplete="new-password">
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;">
+          <span class="login-msg" id="pw_msg"></span>
+          <button class="btn btn-primary" id="pw_saveBtn" onclick="changeMyPassword()">Update Password</button>
+        </div>
+      </div>
+    </div>` : ''}`;
+
+  loadMyIdCard();
 }
 
 async function saveMyProfile() {
@@ -937,14 +1002,24 @@ async function uploadImage(field, dataUri) {
 }
 
 // ── CLASSMATES ───────────────────────────────────────────────────────────
+function populateCampusFilter() {
+  const sel = document.getElementById('classCampusFilter');
+  const current = sel.value;
+  const campuses = [...new Set(allDirectory.map(r => (r.campus || '').trim()).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All Campuses</option>' + campuses.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if (campuses.includes(current)) sel.value = current;
+}
+
 function renderClassmates() {
   const q = (document.getElementById('classSearch').value || '').toLowerCase().trim();
+  const campusFilter = document.getElementById('classCampusFilter').value;
   const grid = document.getElementById('classmatesGrid');
   const filtered = allDirectory.filter(r =>
-    !q ||
-    (r.fullName || '').toLowerCase().includes(q) ||
-    (r.course   || '').toLowerCase().includes(q) ||
-    (r.campus   || '').toLowerCase().includes(q)
+    (!campusFilter || r.campus === campusFilter) &&
+    (!q ||
+      (r.fullName || '').toLowerCase().includes(q) ||
+      (r.course   || '').toLowerCase().includes(q) ||
+      (r.campus   || '').toLowerCase().includes(q))
   );
   if (!filtered.length) { grid.innerHTML = emptyState('No classmates found.'); return; }
   grid.innerHTML = filtered.map(r => `
@@ -974,6 +1049,208 @@ function openClassmate(rowNo) {
 document.getElementById('classmateModal').addEventListener('click', function(e) {
   if (e.target === this) this.classList.remove('open');
 });
+
+// ── MY ID CARD ───────────────────────────────────────────────────────────
+// Renders the student's own card from the shared, backend-stored template
+// (see getIdCardTemplates in code.gs) — works the same on any device,
+// unlike the admin app's old localStorage-only templates.
+let _idCardTemplatesCache = null;
+let _loadedGoogleFonts = new Set();
+
+async function ensureGoogleFont(fontName) {
+  const name = (fontName || '').trim();
+  if (!name || name.toLowerCase() === 'dm sans') return;
+  if (!_loadedGoogleFonts.has(name)) {
+    _loadedGoogleFonts.add(name);
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name).replace(/%20/g, '+')}:wght@400;700&display=swap`;
+    document.head.appendChild(link);
+  }
+  try {
+    await document.fonts.load(`700 16px "${name}"`);
+    await document.fonts.load(`400 16px "${name}"`);
+  } catch (e) { /* fall back silently */ }
+}
+
+function templateKeyForMe() {
+  return (myRecord.isCamp && myRecord.school) ? myRecord.school : (myRecord.campus || 'default');
+}
+
+async function fetchIdCardTemplates() {
+  if (_idCardTemplatesCache) return _idCardTemplatesCache;
+  try {
+    const res  = await fetch(withAuth(GAS_URL + '?action=getIdCardTemplates'));
+    const data = await res.json();
+    if (data.status === 'error' && data.code === 401) { handleAuthError(); return {}; }
+    _idCardTemplatesCache = data.templates || {};
+  } catch (e) {
+    _idCardTemplatesCache = {};
+  }
+  return _idCardTemplatesCache;
+}
+
+async function renderMyCard(tmpl) {
+  const front = document.getElementById('idCardTemplate');
+  const bg = document.getElementById('idcBgImg');
+  const photoWrap = document.getElementById('idcPhotoWrap');
+  const nameEl = document.getElementById('idcName');
+  const descEl = document.getElementById('idcDescriptor');
+  const idEl = document.getElementById('idcId');
+
+  nameEl.textContent = myRecord.fullName || '—';
+  idEl.textContent   = myRecord.studentId || '—';
+  descEl.textContent = myRecord.originSchool || '';
+  descEl.style.display = myRecord.originSchool ? '' : 'none';
+  photoWrap.innerHTML = myRecord.photo
+    ? `<img class="idc-photo" src="${myRecord.photo}" alt="">`
+    : `<div class="idc-photo-placeholder">👤</div>`;
+
+  const descFont = tmpl.descriptorFont || 'DM Sans';
+  await ensureGoogleFont(descFont);
+
+  if (bg.src !== tmpl.image) {
+    await new Promise(resolve => { bg.onload = resolve; bg.onerror = resolve; bg.src = tmpl.image; });
+  }
+
+  const w = 274;
+  const h = w * (bg.naturalHeight / bg.naturalWidth);
+  front.style.width  = w + 'px';
+  front.style.height = h + 'px';
+  const diam = w * (tmpl.photoSize / 100);
+  photoWrap.style.width  = diam + 'px';
+  photoWrap.style.height = diam + 'px';
+  photoWrap.style.top    = (h * tmpl.photoTop  / 100) + 'px';
+  photoWrap.style.left   = (w * tmpl.photoLeft / 100) + 'px';
+  nameEl.style.top = (h * tmpl.nameTop / 100) + 'px';
+  nameEl.style.fontSize = (tmpl.nameSize || 22) + 'px';
+  descEl.style.top = (h * (tmpl.descriptorTop != null ? tmpl.descriptorTop : 69) / 100) + 'px';
+  descEl.style.fontSize = (tmpl.descriptorSize || 16) + 'px';
+  descEl.style.fontFamily = `'${descFont}', sans-serif`;
+  idEl.style.top   = (h * tmpl.idTop   / 100) + 'px';
+  idEl.style.fontSize = (tmpl.idSize || 12) + 'px';
+
+  await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+  return html2canvas(front, { scale: 2.5, backgroundColor: '#ffffff' });
+}
+
+// Embeds a PNG pHYs chunk so the exact pixel canvas prints/displays at the
+// real 58×88mm card size, wherever the file is opened (same fix used in
+// the admin app's ID card downloads).
+function crc32(bytes) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) {
+    crc ^= bytes[i];
+    for (let k = 0; k < 8; k++) crc = (crc & 1) ? (0xEDB88320 ^ (crc >>> 1)) : (crc >>> 1);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+function pngWithPhysicalSize(dataUri, widthMm, heightMm) {
+  const base64 = dataUri.split(',')[1];
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+  const dv = new DataView(bytes.buffer);
+  const pxW = dv.getUint32(16);
+  const pxH = dv.getUint32(20);
+  const pxPerMeterX = Math.round(pxW / (widthMm  / 1000));
+  const pxPerMeterY = Math.round(pxH / (heightMm / 1000));
+
+  const type = [0x70, 0x48, 0x59, 0x73]; // 'pHYs'
+  const data = new Uint8Array(9);
+  const ddv  = new DataView(data.buffer);
+  ddv.setUint32(0, pxPerMeterX);
+  ddv.setUint32(4, pxPerMeterY);
+  data[8] = 1;
+
+  const body = new Uint8Array([...type, ...data]);
+  const crc  = crc32(body);
+  const lenBytes = new Uint8Array(4); new DataView(lenBytes.buffer).setUint32(0, 9);
+  const crcBytes = new Uint8Array(4); new DataView(crcBytes.buffer).setUint32(0, crc);
+  const physChunk = new Uint8Array([...lenBytes, ...body, ...crcBytes]);
+
+  const insertPos = 8 + 25;
+  const out = new Uint8Array(bytes.length + physChunk.length);
+  out.set(bytes.slice(0, insertPos), 0);
+  out.set(physChunk, insertPos);
+  out.set(bytes.slice(insertPos), insertPos + physChunk.length);
+
+  let binOut = '';
+  for (let i = 0; i < out.length; i++) binOut += String.fromCharCode(out[i]);
+  return 'data:image/png;base64,' + btoa(binOut);
+}
+
+async function loadMyIdCard() {
+  if (!myRecord) return;
+  const img = document.getElementById('idc_preview');
+  const placeholder = document.getElementById('idc_placeholder');
+  const btn = document.getElementById('idc_downloadBtn');
+
+  const templates = await fetchIdCardTemplates();
+  const tmpl = templates[templateKeyForMe()] || templates['default'];
+  if (!tmpl) {
+    placeholder.textContent = "Your school hasn't set up an ID card design yet — check with your admin.";
+    return;
+  }
+
+  try {
+    const canvas = await renderMyCard(tmpl);
+    const pngUri = pngWithPhysicalSize(canvas.toDataURL('image/png'), 58, 88);
+    img.src = pngUri;
+    img.dataset.rendered = pngUri;
+    img.style.display = '';
+    placeholder.style.display = 'none';
+    btn.style.display = '';
+  } catch (e) {
+    placeholder.textContent = 'Could not render your ID card right now.';
+  }
+}
+
+function downloadMyIdCard() {
+  const img = document.getElementById('idc_preview');
+  if (!img.dataset.rendered) return;
+  const link = document.createElement('a');
+  link.download = `id_card_${(myRecord.studentId || 'me').toString().replace(/[^a-z0-9]/gi, '_')}.png`;
+  link.href = img.dataset.rendered;
+  link.click();
+}
+
+// ── ACCOUNT SECURITY (Student ID + Password accounts only) ────────────────
+async function changeMyPassword() {
+  const newPw     = document.getElementById('pw_new').value;
+  const confirmPw = document.getElementById('pw_confirm').value;
+  const msgEl = document.getElementById('pw_msg');
+  const btn   = document.getElementById('pw_saveBtn');
+
+  if (newPw.length < 4) { msgEl.textContent = 'At least 4 characters.'; msgEl.className = 'login-msg error'; return; }
+  if (newPw !== confirmPw) { msgEl.textContent = "Passwords don't match."; msgEl.className = 'login-msg error'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload({ action: 'changePassword', newPassword: newPw })) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      currentStudentAuth.studentPassword = newPw;
+      sessionStorage.setItem('studentAuth', JSON.stringify(currentStudentAuth));
+      msgEl.textContent = 'Password updated!';
+      msgEl.className = 'login-msg success';
+      document.getElementById('pw_new').value = '';
+      document.getElementById('pw_confirm').value = '';
+    } else if (data.code === 401) {
+      handleAuthError();
+    } else {
+      msgEl.textContent = data.message || 'Could not update password.';
+      msgEl.className = 'login-msg error';
+    }
+  } catch (e) {
+    msgEl.textContent = 'Connection error.';
+    msgEl.className = 'login-msg error';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Update Password';
+}
 
 // ── ANNOUNCEMENTS / WALL ─────────────────────────────────────────────────
 async function loadAnnouncements() {
