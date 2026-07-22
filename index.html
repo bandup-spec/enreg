@@ -159,24 +159,23 @@
   .login-visual {
     position: relative; overflow: hidden; color: #fff; padding: 56px 52px;
     display: flex; flex-direction: column; justify-content: center;
-    background: linear-gradient(160deg, #071A3D 0%, #123B82 55%, #1C86C4 100%);
+    background: #071A3D;
   }
-  /* Two large soft-edged curves sweeping across the panel — a plain
+  /* Two large, flat-colored curves sweeping across the panel — a plain
      geometric echo of the ID card's gradient-curve design, with no logo
-     or text baked into it. */
+     or text baked into it. Solid (not gradient) fills keep the arc edges
+     crisp, like the reference design, instead of fading into a soft blur. */
   .login-visual::before {
     content: ''; position: absolute; pointer-events: none;
-    width: 1100px; height: 1100px; border-radius: 50%;
-    right: -600px; bottom: -620px;
-    background: linear-gradient(135deg, #1B4F94 0%, #2496CE 100%);
-    opacity: .9;
+    width: 1600px; height: 1600px; border-radius: 50%;
+    right: -900px; top: -260px;
+    background: #123F78;
   }
   .login-visual::after {
     content: ''; position: absolute; pointer-events: none;
-    width: 900px; height: 900px; border-radius: 50%;
-    right: -560px; bottom: -660px;
-    background: linear-gradient(135deg, #0C2760 0%, #1B6FAE 100%);
-    opacity: .65;
+    width: 1440px; height: 1440px; border-radius: 50%;
+    right: -880px; top: -180px;
+    background: #1E86BE;
   }
   .login-visual-content { position: relative; z-index: 1; max-width: 440px; }
   .login-eyebrow { display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16); color: #BFDBFE; font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; padding: 6px 13px; border-radius: 20px; margin-bottom: 22px; }
@@ -2965,7 +2964,8 @@ function saveCardTemplates(all) {
 function getCardTemplate(key) { return loadCardTemplates()[key] || null; }
 function templateKeyFor(r) { return (r.isCamp && r.school) ? r.school : (r.campus || 'default'); }
 
-function openTemplateModal() {
+async function openTemplateModal() {
+  document.getElementById('templateModal').classList.add('open');
   const sel = document.getElementById('tmplKey');
   const schools = loadSchools();
   const profileRec = allRecords.find(rec => rec.rowNo === profileRowNo);
@@ -2974,6 +2974,8 @@ function openTemplateModal() {
     + CAMPUS_LIST.map(c => `<option value="${c}">${c} (regular)</option>`).join('')
     + schools.map(s => `<option value="${s.replace(/"/g,'&quot;')}">${s} (camp)</option>`).join('');
   if ([...sel.options].some(o => o.value === currentKey)) sel.value = currentKey;
+
+  await syncTemplatesFromServer(); // pick up designs saved from any other device first
   loadTemplateIntoForm();
   renderPresetGallery();
 
@@ -2983,8 +2985,6 @@ function openTemplateModal() {
   document.getElementById('tmplSampleName').value   = (profileRec && profileRec.fullName)     || 'Juan Dela Cruz';
   document.getElementById('tmplSampleId').value     = (profileRec && profileRec.studentId)    || 'CU-J00000';
   document.getElementById('tmplSampleSchool').value = (profileRec && profileRec.originSchool) || 'Tokyo Gakkan High Student';
-
-  document.getElementById('templateModal').classList.add('open');
 }
 function closeTemplateModal() {
   document.getElementById('templateModal').classList.remove('open');
@@ -3074,16 +3074,42 @@ function readTemplateFormValues() {
   };
 }
 
-function saveTemplate() {
+async function saveTemplate() {
   const key = document.getElementById('tmplKey').value;
   const all = loadCardTemplates();
   const pending = document.getElementById('tmplPreviewImg').dataset.pending;
   const image = pending || (all[key] && all[key].image);
   if (!image) { toast('Upload a design image first.', 'error'); return; }
-  all[key] = Object.assign({ image }, readTemplateFormValues());
+
+  const fields = readTemplateFormValues();
+  all[key] = Object.assign({ image }, fields);
   saveCardTemplates(all);
-  toast('Card template saved!', 'success');
   closeTemplateModal();
+
+  // Push to the backend too (Drive-backed storage) so students can
+  // render/download their own ID card from profile.html on any device —
+  // not just this admin's browser, where templates used to live only in
+  // localStorage.
+  try {
+    const payload = Object.assign({ action: 'saveIdCardTemplate', key, image }, fields);
+    const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload(payload)) });
+    const data = await res.json();
+    if (data.status === 'ok') toast('Card template saved and synced!', 'success');
+    else toast('Saved locally, but could not sync to server: ' + (data.message || 'unknown error'), 'error');
+  } catch (e) {
+    toast('Saved locally, but could not reach the server to sync.', 'error');
+  }
+}
+
+// Pulls the latest server-stored templates into localStorage — keeps this
+// browser's cache in sync with whatever was last saved (possibly from a
+// different device), so the Template modal doesn't show stale designs.
+async function syncTemplatesFromServer() {
+  try {
+    const res  = await fetch(withAuth(GAS_URL + '?action=getIdCardTemplates'));
+    const data = await res.json();
+    if (data.status === 'ok' && data.templates) saveCardTemplates(data.templates);
+  } catch (e) { /* offline / unreachable — keep using whatever's cached locally */ }
 }
 
 // Renders a given template + student data into the offscreen #idCardTemplate
