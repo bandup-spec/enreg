@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
@@ -415,17 +416,17 @@
 
         <div class="login-divider"><span>or sign in as a student</span></div>
 
-        <form class="student-login-form" onsubmit="event.preventDefault(); studentPasswordLogin();">
+        <form class="student-login-form" onsubmit="event.preventDefault(); handleStudentIdSubmit();">
           <div class="field" style="text-align:left;margin-bottom:10px;">
             <label>Student ID</label>
-            <input type="text" id="stuLoginId" placeholder="e.g. 122" autocomplete="username">
+            <input type="text" id="stuLoginId" placeholder="e.g. 122" autocomplete="username" oninput="resetStudentStage()">
           </div>
-          <div class="field" style="text-align:left;margin-bottom:6px;">
-            <label>Password</label>
-            <input type="password" id="stuLoginPass" placeholder="Enter or create your password" autocomplete="current-password">
+          <div class="field" id="stuPassField" style="text-align:left;margin-bottom:6px;display:none;">
+            <label id="stuPassLabel">Password</label>
+            <input type="password" id="stuLoginPass" placeholder="Enter your password" autocomplete="current-password">
           </div>
-          <span class="field-hint" style="display:block;text-align:left;margin-bottom:14px;">First time signing in? Just type your Student ID and any password — it becomes your password from then on.</span>
-          <button type="submit" class="btn btn-primary" style="width:100%;" id="stuLoginBtn">Sign In</button>
+          <span class="field-hint" id="stuPassHint" style="display:none;text-align:left;margin-bottom:14px;"></span>
+          <button type="submit" class="btn btn-primary" style="width:100%;" id="stuLoginBtn">Continue</button>
         </form>
         <div class="login-msg" id="stuLoginMsg"></div>
       </div>
@@ -981,7 +982,7 @@
       <div class="bulk-bar" id="bulkBar">
         <span id="bulkCount">0 selected</span>
         <button class="btn btn-ghost btn-sm" onclick="bulkMarkGraduated()">Mark Graduated Today</button>
-        <button class="btn btn-success btn-sm" id="bulkIdCardBtn" onclick="bulkDownloadIdCards()">⬇ ID Cards (Front, PDF)</button>
+        <button class="btn btn-success btn-sm" id="bulkIdCardBtn" onclick="bulkDownloadIdCards()">⬇ ID Cards (Front, PNG ZIP)</button>
         <button class="btn btn-ghost btn-sm" onclick="bulkArchive(true)">Archive Selected</button>
         <button class="btn btn-ghost btn-sm" onclick="bulkArchive(false)">Restore Selected</button>
         <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Clear</button>
@@ -1160,10 +1161,84 @@ async function handleCredentialResponse(response) {
 }
 
 // Student ID + Password sign-in — the second option on the same login
-// screen (no separate "go to Student Hub" click needed). On success we
-// stash the credentials in sessionStorage so profile.html (the Student
-// Hub) can sign the student straight in there too, then hand off to it —
-// this admin app has no student-facing views of its own.
+// screen (no separate "go to Student Hub" click needed). Staged in two
+// steps: first the Student ID alone (looked up via checkStudentId so we
+// know whether to ask for their existing password or have them create
+// one), then the password itself. On success we stash the credentials in
+// sessionStorage so profile.html (the Student Hub) can sign the student
+// straight in there too, then hand off to it — this admin app has no
+// student-facing views of its own.
+let stuIdConfirmed = false; // true once the shown password field matches the typed Student ID
+
+function resetStudentStage() {
+  if (!stuIdConfirmed) return;
+  stuIdConfirmed = false;
+  document.getElementById('stuPassField').style.display = 'none';
+  document.getElementById('stuPassHint').style.display = 'none';
+  document.getElementById('stuLoginPass').value = '';
+  document.getElementById('stuLoginBtn').textContent = 'Continue';
+  document.getElementById('stuLoginMsg').className = 'login-msg';
+  document.getElementById('stuLoginMsg').textContent = '';
+}
+
+async function handleStudentIdSubmit() {
+  if (stuIdConfirmed) { studentPasswordLogin(); return; }
+
+  const studentId = document.getElementById('stuLoginId').value.trim();
+  const msgEl = document.getElementById('stuLoginMsg');
+  const btn   = document.getElementById('stuLoginBtn');
+
+  if (!studentId) {
+    msgEl.textContent = 'Please enter your Student ID.';
+    msgEl.className = 'login-msg show error';
+    return;
+  }
+
+  msgEl.className = 'login-msg';
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+
+  try {
+    const res  = await fetch(GAS_URL + '?action=checkStudentId&studentId=' + encodeURIComponent(studentId));
+    const data = await res.json();
+    if (!data.exists) {
+      msgEl.textContent = 'No student found with that Student ID.';
+      msgEl.className = 'login-msg show error';
+      btn.disabled = false;
+      btn.textContent = 'Continue';
+      return;
+    }
+
+    stuIdConfirmed = true;
+    const passField = document.getElementById('stuPassField');
+    const passLabel = document.getElementById('stuPassLabel');
+    const passHint  = document.getElementById('stuPassHint');
+    const passInput = document.getElementById('stuLoginPass');
+    passField.style.display = '';
+    if (data.hasPassword) {
+      passLabel.textContent = 'Password';
+      passInput.placeholder = 'Enter your password';
+      passHint.style.display = 'none';
+      btn.textContent = 'Sign In';
+    } else {
+      passLabel.textContent = 'Create a Password';
+      passInput.placeholder = 'Create a password';
+      passHint.textContent = 'This Student ID has no password yet — whatever you type here becomes your password.';
+      passHint.style.display = '';
+      btn.textContent = 'Create Password & Sign In';
+    }
+    msgEl.textContent = '';
+    msgEl.className = 'login-msg';
+    btn.disabled = false;
+    passInput.focus();
+  } catch (e) {
+    msgEl.textContent = 'Connection error. Please try again.';
+    msgEl.className = 'login-msg show error';
+    btn.disabled = false;
+    btn.textContent = 'Continue';
+  }
+}
+
 async function studentPasswordLogin() {
   const studentId       = document.getElementById('stuLoginId').value.trim();
   const studentPassword = document.getElementById('stuLoginPass').value;
@@ -3305,27 +3380,38 @@ async function bulkDownloadIdCards() {
   btn.disabled = true;
 
   try {
-    const { jsPDF } = window.jspdf;
-    let pdf = null;
+    const zip = new JSZip();
+    const usedNames = new Set();
 
     for (let i = 0; i < records.length; i++) {
       btn.innerHTML = `<span class="spinner"></span> Rendering ${i + 1}/${records.length}…`;
       const canvas = await renderCardFrontFor(records[i]);
-      // Every page is locked to the real card size (58×88mm) — the canvas stays
-      // high-res for print quality, but the PDF page itself is always 58×88mm.
-      if (!pdf) {
-        pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [58, 88] });
-      } else {
-        pdf.addPage([58, 88], 'portrait');
-      }
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 58, 88);
+      // Same fix as the single-card PNG download: embed a pHYs chunk so the
+      // exact pixel canvas prints/displays at the real 58×88mm card size.
+      const pngUri  = pngWithPhysicalSize(canvas.toDataURL('image/png'), 58, 88);
+      const base64  = pngUri.split(',')[1];
+
+      const baseName = `${(records[i].studentId || 'id').toString().trim()}_${(records[i].fullName || 'student').toString().trim()}`
+        .replace(/[^a-z0-9_\-]+/gi, '_');
+      let finalName = baseName, n = 2;
+      while (usedNames.has(finalName)) finalName = `${baseName}_${n++}`;
+      usedNames.add(finalName);
+
+      zip.file(`${finalName}.png`, base64, { base64: true });
     }
 
+    btn.innerHTML = `<span class="spinner"></span> Zipping…`;
+    const blob  = await zip.generateAsync({ type: 'blob' });
     const today = new Date().toISOString().slice(0, 10);
-    pdf.save(`id_cards_batch_${records.length}_${today}.pdf`);
-    toast(`Downloaded ${records.length} ID card(s) as one PDF!`, 'success');
+    const link  = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `id_cards_batch_${records.length}_${today}.zip`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+
+    toast(`Downloaded ${records.length} ID card(s) as a ZIP of PNGs!`, 'success');
   } catch (e) {
-    toast('Could not generate batch PDF.', 'error');
+    toast('Could not generate the ZIP file.', 'error');
   }
 
   btn.disabled = false;
