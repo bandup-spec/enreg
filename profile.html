@@ -72,6 +72,17 @@
   .login-msg.info    { color: var(--muted); }
   .login-msg.error   { color: var(--danger); }
   .login-msg.success { color: var(--success); }
+  .login-divider { display: flex; align-items: center; gap: 12px; margin: 22px 0 18px; font-size: 12px; color: var(--muted); max-width: 320px; }
+  .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .student-login-form { text-align: left; max-width: 320px; }
+  .student-login-form .field { margin-bottom: 10px; }
+  .student-login-form label { display: block; font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; margin-bottom: 6px; }
+  .student-login-form input { width: 100%; padding: 10px 12px; border: 1px solid var(--border-dk); border-radius: var(--radius); font-size: 14px; background: var(--surface); }
+  .student-login-form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-lt); }
+  .student-login-form .field-hint { display: block; font-size: 12px; color: var(--muted); margin: -4px 0 14px; line-height: 1.4; }
+  .student-login-form button { width: 100%; padding: 11px; border: none; border-radius: var(--radius); background: var(--accent); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .student-login-form button:hover { background: var(--accent-dk); }
+  .student-login-form button:disabled { opacity: .6; cursor: default; }
 
   /* Signature: a fanned stack of ID-card shapes, echoing the actual student
      ID cards this system issues — not a generic gradient blob. */
@@ -255,6 +266,21 @@
         </div>
         <div id="gsiButtonWrap"></div>
         <div class="login-msg" id="loginMsg"></div>
+
+        <div class="login-divider"><span>or sign in with your Student ID</span></div>
+        <form class="student-login-form" onsubmit="event.preventDefault(); handleStudentIdSubmit();">
+          <div class="field">
+            <label>Student ID</label>
+            <input type="text" id="stuLoginId" placeholder="e.g. 122" autocomplete="username" oninput="resetStudentStage()">
+          </div>
+          <div class="field" id="stuPassField" style="display:none;">
+            <label id="stuPassLabel">Password</label>
+            <input type="password" id="stuLoginPass" placeholder="Enter your password" autocomplete="current-password">
+          </div>
+          <span class="field-hint" id="stuPassHint" style="display:none;"></span>
+          <button type="submit" id="stuLoginBtn">Continue</button>
+        </form>
+        <div class="login-msg" id="stuLoginMsg"></div>
       </div>
       <div class="id-stack">
         <div class="id-card id-card-1"><div class="id-card-inner">
@@ -363,7 +389,8 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxq7O4an7fkam6XbhaYMoGZ
 const GOOGLE_CLIENT_ID = '432071525789-eo7tb1b1mlal146lol24nd6il1ccpqjk.apps.googleusercontent.com';
 
 // ── STATE ────────────────────────────────────────────────────────────────
-let currentIdToken   = null;
+let currentIdToken     = null;
+let currentStudentAuth = null; // { studentId, studentPassword } — set when signed in via Student ID + Password instead of Google
 let currentUserRole  = '';   // 'super_admin' | 'admin' | 'encoder' | 'student'
 let currentUserEmail = '';
 let myRecord          = null; // full self-record (student role only); null for staff without a linked record
@@ -376,9 +403,16 @@ function isAdmin() { return currentUserRole === 'admin' || currentUserRole === '
 // ── AUTH HELPERS ─────────────────────────────────────────────────────────
 function withAuth(url) {
   const sep = url.includes('?') ? '&' : '?';
+  if (currentStudentAuth) {
+    return url + sep + 'studentId=' + encodeURIComponent(currentStudentAuth.studentId) +
+           '&studentPassword=' + encodeURIComponent(currentStudentAuth.studentPassword);
+  }
   return url + sep + 'idToken=' + encodeURIComponent(currentIdToken || '');
 }
 function withAuthPayload(payload) {
+  if (currentStudentAuth) {
+    return Object.assign({}, payload, { studentId: currentStudentAuth.studentId, studentPassword: currentStudentAuth.studentPassword });
+  }
   return Object.assign({}, payload, { idToken: currentIdToken });
 }
 function showLoginMsg(text, type) {
@@ -388,6 +422,8 @@ function showLoginMsg(text, type) {
 }
 function handleAuthError(customMsg) {
   currentIdToken = null;
+  currentStudentAuth = null;
+  sessionStorage.removeItem('studentAuth');
   currentUserRole = '';
   currentUserEmail = '';
   myRecord = null;
@@ -398,6 +434,8 @@ function handleAuthError(customMsg) {
 }
 function handleLogout() {
   currentIdToken = null;
+  currentStudentAuth = null;
+  sessionStorage.removeItem('studentAuth');
   currentUserRole = '';
   currentUserEmail = '';
   myRecord = null;
@@ -408,6 +446,8 @@ function handleLogout() {
 }
 
 async function handleCredentialResponse(response) {
+  currentStudentAuth = null;
+  sessionStorage.removeItem('studentAuth');
   currentIdToken = response.credential;
   let claims = {};
   try { claims = JSON.parse(atob(response.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); } catch(e) {}
@@ -452,17 +492,180 @@ async function handleCredentialResponse(response) {
   switchTab(myRecord ? 'profile' : 'classmates');
 }
 
+// Shared "you're in" flow for Student ID + Password sign-in — the
+// password-based counterpart to handleCredentialResponse(). Also used to
+// silently resume a session handed off from the Enrollment Registry login
+// screen (via sessionStorage) so students don't have to sign in twice.
+async function enterAsStudent(studentId, studentPassword) {
+  currentStudentAuth = { studentId, studentPassword };
+  showLoginMsg('Verifying access…', 'info');
+
+  let verified = false;
+  try {
+    const res  = await fetch(withAuth(GAS_URL + '?action=getDirectory'));
+    const data = await res.json();
+    if (data.status === 'ok') {
+      verified = true;
+      allDirectory = data.directory || [];
+      currentUserRole = data.role || 'student';
+    } else if (data.code === 401) {
+      handleAuthError(data.message || 'Incorrect Student ID or password.');
+    } else {
+      showLoginMsg('Connection error. Please try again.', 'error');
+    }
+  } catch (e) {
+    showLoginMsg('Connection error. Please try again.', 'error');
+  }
+  if (!verified) return false;
+
+  currentUserEmail = '';
+  sessionStorage.setItem('studentAuth', JSON.stringify({ studentId, studentPassword }));
+
+  await Promise.all([loadMyRecord(), loadAnnouncements()]);
+  renderClassmates();
+
+  document.getElementById('userAvatar').src = (myRecord && myRecord.photo) || '';
+  document.getElementById('userName').textContent = (myRecord && myRecord.fullName) || ('Student ' + studentId);
+
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.getElementById('appShell').classList.add('ready');
+  showLoginMsg('', '');
+
+  switchTab(myRecord ? 'profile' : 'classmates');
+  return true;
+}
+
+// Staged Student ID + Password form: Student ID first (looked up so we know
+// whether to prompt for an existing password or let them create one),
+// password revealed only once the ID is confirmed.
+let stuIdConfirmed = false;
+
+function resetStudentStage() {
+  if (!stuIdConfirmed) return;
+  stuIdConfirmed = false;
+  document.getElementById('stuPassField').style.display = 'none';
+  document.getElementById('stuPassHint').style.display = 'none';
+  document.getElementById('stuLoginPass').value = '';
+  document.getElementById('stuLoginBtn').textContent = 'Continue';
+  document.getElementById('stuLoginMsg').textContent = '';
+  document.getElementById('stuLoginMsg').className = 'login-msg';
+}
+
+async function handleStudentIdSubmit() {
+  if (stuIdConfirmed) { studentPasswordLogin(); return; }
+
+  const studentId = document.getElementById('stuLoginId').value.trim();
+  const msgEl = document.getElementById('stuLoginMsg');
+  const btn   = document.getElementById('stuLoginBtn');
+
+  if (!studentId) {
+    msgEl.textContent = 'Please enter your Student ID.';
+    msgEl.className = 'login-msg error';
+    return;
+  }
+
+  msgEl.className = 'login-msg';
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+
+  try {
+    const res  = await fetch(GAS_URL + '?action=checkStudentId&studentId=' + encodeURIComponent(studentId));
+    const data = await res.json();
+    if (!data.exists) {
+      msgEl.textContent = 'No student found with that Student ID.';
+      msgEl.className = 'login-msg error';
+      btn.disabled = false;
+      btn.textContent = 'Continue';
+      return;
+    }
+
+    stuIdConfirmed = true;
+    const passField = document.getElementById('stuPassField');
+    const passLabel = document.getElementById('stuPassLabel');
+    const passHint  = document.getElementById('stuPassHint');
+    const passInput = document.getElementById('stuLoginPass');
+    passField.style.display = '';
+    if (data.hasPassword) {
+      passLabel.textContent = 'Password';
+      passInput.placeholder = 'Enter your password';
+      passHint.style.display = 'none';
+      btn.textContent = 'Sign In';
+    } else {
+      passLabel.textContent = 'Create a Password';
+      passInput.placeholder = 'Create a password';
+      passHint.textContent = 'This Student ID has no password yet — whatever you type here becomes your password.';
+      passHint.style.display = '';
+      btn.textContent = 'Create Password & Sign In';
+    }
+    msgEl.textContent = '';
+    msgEl.className = 'login-msg';
+    btn.disabled = false;
+    passInput.focus();
+  } catch (e) {
+    msgEl.textContent = 'Connection error. Please try again.';
+    msgEl.className = 'login-msg error';
+    btn.disabled = false;
+    btn.textContent = 'Continue';
+  }
+}
+
+async function studentPasswordLogin() {
+  const studentId       = document.getElementById('stuLoginId').value.trim();
+  const studentPassword = document.getElementById('stuLoginPass').value;
+  const msgEl = document.getElementById('stuLoginMsg');
+  const btn   = document.getElementById('stuLoginBtn');
+
+  if (!studentId || !studentPassword) {
+    msgEl.textContent = 'Please enter your Student ID and password.';
+    msgEl.className = 'login-msg error';
+    return;
+  }
+
+  msgEl.className = 'login-msg';
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+
+  try {
+    const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'studentLogin', studentId, studentPassword }) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      msgEl.textContent = data.isNewPassword ? 'Password created!' : 'Welcome back!';
+      msgEl.className = 'login-msg success';
+      await enterAsStudent(studentId, studentPassword);
+    } else {
+      msgEl.textContent = data.message || 'Invalid Student ID or password.';
+      msgEl.className = 'login-msg error';
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+    }
+  } catch (e) {
+    msgEl.textContent = 'Connection error. Please try again.';
+    msgEl.className = 'login-msg error';
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
 window.addEventListener('load', () => {
+  // If the student already signed in via Student ID + Password on the
+  // Enrollment Registry login screen, resume that session here directly —
+  // no second login screen.
+  let handoff = null;
+  try { handoff = JSON.parse(sessionStorage.getItem('studentAuth') || 'null'); } catch (e) {}
+  if (handoff && handoff.studentId && handoff.studentPassword) {
+    enterAsStudent(handoff.studentId, handoff.studentPassword);
+  }
+
   google.accounts.id.initialize({
     client_id: GOOGLE_CLIENT_ID,
     callback: handleCredentialResponse,
-    auto_select: true,
+    auto_select: !handoff,
   });
   google.accounts.id.renderButton(
     document.getElementById('gsiButtonWrap'),
     { theme: 'filled_blue', size: 'large', shape: 'pill', text: 'signin_with' }
   );
-  google.accounts.id.prompt();
+  if (!handoff) google.accounts.id.prompt();
 });
 
 // ── SMALL HELPERS ────────────────────────────────────────────────────────
