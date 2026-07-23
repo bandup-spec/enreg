@@ -567,6 +567,32 @@
         </select>
         <span class="field-hint" style="display:block;margin-top:4px;">How many student records show per page in the table.</span>
       </div>
+
+      <div class="field" style="margin-top:18px;">
+        <label>Auto-Logout After Inactivity</label>
+        <select id="idleTimeoutSelect" onchange="changeIdleTimeout(this.value)">
+          <option value="0">Never</option>
+          <option value="10">10 minutes</option>
+          <option value="20">20 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60">60 minutes</option>
+        </select>
+        <span class="field-hint" style="display:block;margin-top:4px;">Recommended on shared front-desk computers, so no one's left signed in by accident.</span>
+      </div>
+
+      <div class="field" style="margin-top:18px;">
+        <label>Default Campus Filter</label>
+        <select id="defaultCampusSelect" onchange="changeDefaultCampus(this.value)">
+          <option value="">All Campuses</option>
+        </select>
+        <span class="field-hint" style="display:block;margin-top:4px;">Automatically filters the table to this campus every time you sign in.</span>
+      </div>
+
+      <div class="field" style="margin-top:18px;">
+        <label style="display:block;margin-bottom:8px;">Table Columns</label>
+        <div id="colVisibilityList" style="display:flex;flex-direction:column;gap:6px;"></div>
+        <span class="field-hint" style="display:block;margin-top:4px;">Hide columns you don't check often to keep the table focused.</span>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost btn-sm" onclick="closeSettingsModal()">Done</button>
@@ -1076,16 +1102,16 @@
               <th style="width:44px;">#</th>
               <th class="sortable" onclick="sortTable(1)">ID <span class="sort-icon">↕</span></th>
               <th class="sortable" onclick="sortTable(2)">Full Name <span class="sort-icon">↕</span></th>
-              <th class="sortable" onclick="sortTable(3)">Campus <span class="sort-icon">↕</span></th>
-              <th class="sortable" onclick="sortTable(4)">Country <span class="sort-icon">↕</span></th>
-              <th class="sortable" onclick="sortTable(5)">Course <span class="sort-icon">↕</span></th>
-              <th class="sortable" onclick="sortTable(6)">Type <span class="sort-icon">↕</span></th>
-              <th class="sortable" onclick="sortTable(7)">Date Started <span class="sort-icon">↕</span></th>
-              <th class="sortable" onclick="sortTable(8)">Date Ended <span class="sort-icon">↕</span></th>
-              <th class="sortable" onclick="sortTable(9)">Graduation <span class="sort-icon">↕</span></th>
-              <th>Weeks</th>
-              <th>Memo</th>
-              <th>Last Edited</th>
+              <th class="sortable" onclick="sortTable(3)" data-col="Campus">Campus <span class="sort-icon">↕</span></th>
+              <th class="sortable" onclick="sortTable(4)" data-col="Country">Country <span class="sort-icon">↕</span></th>
+              <th class="sortable" onclick="sortTable(5)" data-col="Course">Course <span class="sort-icon">↕</span></th>
+              <th class="sortable" onclick="sortTable(6)" data-col="Type">Type <span class="sort-icon">↕</span></th>
+              <th class="sortable" onclick="sortTable(7)" data-col="Date Started">Date Started <span class="sort-icon">↕</span></th>
+              <th class="sortable" onclick="sortTable(8)" data-col="Date Ended">Date Ended <span class="sort-icon">↕</span></th>
+              <th class="sortable" onclick="sortTable(9)" data-col="Graduation">Graduation <span class="sort-icon">↕</span></th>
+              <th data-col="Weeks">Weeks</th>
+              <th data-col="Memo">Memo</th>
+              <th data-col="Last Edited">Last Edited</th>
               <th style="width:100px;"></th>
             </tr>
           </thead>
@@ -1239,7 +1265,9 @@ async function handleCredentialResponse(response) {
   document.getElementById('appShell').classList.add('ready');
   showLoginMsg('', '');
 
-  loadRecords(); // re-runs the full render pipeline (sorting, filters, dropdowns, etc.)
+  resetIdleTimer();
+  await loadRecords(); // re-runs the full render pipeline (sorting, filters, dropdowns, etc.)
+  applyDefaultCampusFilter();
   loadSchools();
 }
 
@@ -1392,9 +1420,79 @@ function changePageSize(val) {
   currentPage = 1;
   renderTable(currentFilteredRecords);
 }
+
+// ── COLUMN VISIBILITY ────────────────────────────────────────────────────
+const TOGGLEABLE_COLUMNS = ['Campus', 'Country', 'Course', 'Type', 'Date Started', 'Date Ended', 'Graduation', 'Weeks', 'Memo', 'Last Edited'];
+function getHiddenCols() {
+  try { return JSON.parse(localStorage.getItem('enreg_hiddenCols') || '[]'); } catch (e) { return []; }
+}
+function applyColumnVisibility() {
+  const hidden = getHiddenCols();
+  let style = document.getElementById('colVisStyle');
+  if (!style) { style = document.createElement('style'); style.id = 'colVisStyle'; document.head.appendChild(style); }
+  style.textContent = hidden.map(col => `[data-col="${col}"], [data-label="${col}"] { display: none; }`).join('\n');
+}
+function toggleColumn(col, visible) {
+  let hidden = getHiddenCols();
+  hidden = visible ? hidden.filter(c => c !== col) : [...new Set([...hidden, col])];
+  localStorage.setItem('enreg_hiddenCols', JSON.stringify(hidden));
+  applyColumnVisibility();
+}
+function renderColumnVisibilityList() {
+  const hidden = getHiddenCols();
+  document.getElementById('colVisibilityList').innerHTML = TOGGLEABLE_COLUMNS.map(col => `
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer;">
+      <input type="checkbox" ${hidden.includes(col) ? '' : 'checked'} onchange="toggleColumn('${col}', this.checked)">
+      ${col}
+    </label>
+  `).join('');
+}
+
+// ── AUTO-LOGOUT (IDLE TIMEOUT) ───────────────────────────────────────────
+let idleTimer = null;
+function getIdleTimeoutMinutes() { return parseInt(localStorage.getItem('enreg_idleTimeout'), 10) || 0; }
+function resetIdleTimer() {
+  if (idleTimer) clearTimeout(idleTimer);
+  const mins = getIdleTimeoutMinutes();
+  if (!mins) return; // 0 = "Never"
+  idleTimer = setTimeout(() => {
+    if (document.getElementById('appShell').classList.contains('ready')) {
+      handleLogout();
+      showLoginMsg('Signed out after a period of inactivity.', 'info');
+    }
+  }, mins * 60 * 1000);
+}
+function changeIdleTimeout(val) {
+  localStorage.setItem('enreg_idleTimeout', val);
+  resetIdleTimer();
+}
+['mousemove', 'keydown', 'click', 'scroll'].forEach(evt => document.addEventListener(evt, () => resetIdleTimer(), { passive: true }));
+
+// ── DEFAULT CAMPUS FILTER ────────────────────────────────────────────────
+function getDefaultCampus() { return localStorage.getItem('enreg_defaultCampus') || ''; }
+function changeDefaultCampus(val) {
+  localStorage.setItem('enreg_defaultCampus', val);
+}
+function populateDefaultCampusSelect() {
+  const sel = document.getElementById('defaultCampusSelect');
+  const current = getDefaultCampus();
+  sel.innerHTML = '<option value="">All Campuses</option>' + CAMPUS_LIST.map(c => `<option value="${c}">${c}</option>`).join('');
+  sel.value = current;
+}
+function applyDefaultCampusFilter() {
+  const campus = getDefaultCampus();
+  const sel = document.getElementById('searchCampus');
+  if (campus && sel && [...sel.options].some(o => o.value === campus)) {
+    sel.value = campus;
+    filterTable();
+  }
+}
 function openSettingsModal() {
   document.getElementById('darkModeToggle').checked = document.body.classList.contains('dark');
   document.getElementById('pageSizeSelect').value = String(PAGE_SIZE);
+  document.getElementById('idleTimeoutSelect').value = String(getIdleTimeoutMinutes());
+  populateDefaultCampusSelect();
+  renderColumnVisibilityList();
   document.getElementById('settingsModal').classList.add('open');
 }
 function closeSettingsModal() {
@@ -1402,6 +1500,7 @@ function closeSettingsModal() {
 }
 
 function handleLogout() {
+  if (idleTimer) clearTimeout(idleTimer);
   currentIdToken = null;
   currentUserRole = 'admin';
   try { google.accounts.id.disableAutoSelect(); } catch(e) {}
@@ -1412,6 +1511,7 @@ function handleLogout() {
 
 window.addEventListener('load', () => {
   applySavedTheme();
+  applyColumnVisibility();
   google.accounts.id.initialize({
     client_id: GOOGLE_CLIENT_ID,
     callback: handleCredentialResponse,
@@ -2472,6 +2572,7 @@ function clearSelection() {
 }
 
 async function archiveSingle(rowNo, archived) {
+  if (archived && !confirm('Archive this student\'s record? They\'ll be hidden from active lists, but you can restore them anytime.')) return;
   try {
     const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload({ action: 'archive', rowNo, archived })) });
     const data = await res.json();
@@ -2487,6 +2588,7 @@ async function archiveSingle(rowNo, archived) {
 
 async function bulkArchive(archived) {
   if (!selectedRows.size) return;
+  if (archived && !confirm(`Archive ${selectedRows.size} selected record(s)? They'll be hidden from active lists, but you can restore them anytime.`)) return;
   try {
     const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload({ action: 'bulkUpdate', rowNos: [...selectedRows], updates: { archived } })) });
     const data = await res.json();
