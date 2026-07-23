@@ -135,7 +135,30 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.5); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); z-index: 500; display: flex; align-items: center; justify-content: center; padding: 20px; opacity: 0; pointer-events: none; transition: opacity .2s; }
   .modal-overlay.open { opacity: 1; pointer-events: all; }
+  body.dark {
+    --bg:        #0F1420;
+    --surface:   #1A2033;
+    --border:    #2A3247;
+    --border-dk: #384259;
+    --text:      #EAECF0;
+    --text-2:    #CBD2E1;
+    --muted:     #8B94AC;
+    --muted-lt:  #6B7488;
+    --accent-lt: #1E2A4A;
+    --success-lt:#0F2A22;
+    --danger-lt: #2E1618;
+    --warn-lt:   #2E2210;
+  }
   .modal { background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; transform: translateY(14px) scale(.985); transition: transform .22s cubic-bezier(.2,.9,.3,1); }
+  .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch-slider { position: absolute; cursor: pointer; inset: 0; background: var(--border-dk); border-radius: 999px; transition: .2s; }
+  .switch-slider::before { content: ''; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+  .switch input:checked + .switch-slider { background: var(--accent); }
+  .switch input:checked + .switch-slider::before { transform: translateX(18px); }
+  #pageSizeSelect { width: 100%; padding: 9px 12px; border: 1px solid var(--border-dk); border-radius: var(--radius); font-size: 13.5px; background: var(--surface); color: var(--text); }
+  .btn-danger { background: var(--danger); color: #fff; border: none; }
+  .btn-danger:hover { background: #B91C1C; }
   .modal-overlay.open .modal { transform: none; }
   .modal-header { padding: 22px 26px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
   .modal-title { font-family: 'DM Serif Display', serif; font-size: 19px; font-weight: 400; color: var(--ink); }
@@ -448,6 +471,8 @@
     <div class="user-chip">
       <img class="user-avatar" id="userAvatar" src="" alt="">
       <span class="user-email" id="userEmail"></span>
+      <button class="logout-btn" id="profileBtn" onclick="openMyAccountModal()" title="My profile">Profile</button>
+      <button class="logout-btn" id="settingsBtn" onclick="openSettingsModal()" title="Settings">⚙ Settings</button>
       <button class="logout-btn" id="logoutBtn" onclick="handleLogout()">Sign out</button>
     </div>
   </div>
@@ -488,6 +513,63 @@
       <div class="ml-auto">
         <button class="btn btn-primary btn-sm" id="paSaveBtn" onclick="savePhotoAdjust()">Save Photo</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- MY ACCOUNT MODAL (admin/encoder's own identity — separate from #profileModal, which views a STUDENT's profile) -->
+<div class="modal-overlay" id="myAccountModal">
+  <div class="modal" style="max-width:380px;text-align:center;">
+    <div class="modal-header">
+      <span class="modal-title">My Profile</span>
+      <button class="modal-close" onclick="closeMyAccountModal()">✕</button>
+    </div>
+    <div class="modal-body" style="text-align:center;padding:28px 26px;">
+      <img id="acctAvatar" src="" alt="" style="width:76px;height:76px;border-radius:50%;object-fit:cover;box-shadow:var(--shadow-md);margin-bottom:14px;">
+      <div id="acctName" style="font-weight:700;font-size:16px;color:var(--text);"></div>
+      <div id="acctEmail" style="font-size:13px;color:var(--muted);margin-top:2px;"></div>
+      <span id="acctRoleBadge" class="stat-badge" style="margin-top:12px;display:inline-block;"></span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeMyAccountModal()">Close</button>
+      <div class="ml-auto">
+        <button class="btn btn-danger btn-sm" onclick="closeMyAccountModal(); handleLogout();">Sign Out</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <span class="modal-title">Settings</span>
+      <button class="modal-close" onclick="closeSettingsModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+        <div>
+          <label style="display:block;">Dark Mode</label>
+          <span class="field-hint" style="display:block;margin-top:2px;">Easier on the eyes in low light.</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="darkModeToggle" onchange="toggleDarkMode(this.checked)">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <div class="field">
+        <label>Rows Per Page</label>
+        <select id="pageSizeSelect" onchange="changePageSize(this.value)">
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+        </select>
+        <span class="field-hint" style="display:block;margin-top:4px;">How many student records show per page in the table.</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeSettingsModal()">Done</button>
     </div>
   </div>
 </div>
@@ -1038,6 +1120,7 @@ let currentIdToken = null; // set after successful Google Sign-In; sent with eve
 // Defaults to 'admin' until the backend starts returning a role (keeps
 // existing behavior unchanged until the Sheet/GAS side is wired up).
 let currentUserRole = 'admin';
+let currentUserName = '';
 function isSuperAdmin() { return currentUserRole === 'super_admin'; }
 function isAdmin()      { return currentUserRole === 'admin' || currentUserRole === 'super_admin'; }
 function isEncoder()    { return currentUserRole === 'encoder'; }
@@ -1150,6 +1233,7 @@ async function handleCredentialResponse(response) {
 
   document.getElementById('userEmail').textContent = claims.email || '';
   document.getElementById('userAvatar').src = claims.picture || '';
+  currentUserName = claims.name || '';
 
   document.getElementById('loginOverlay').classList.add('hidden');
   document.getElementById('appShell').classList.add('ready');
@@ -1278,6 +1362,45 @@ async function studentPasswordLogin() {
   }
 }
 
+// ── MY ACCOUNT MODAL ─────────────────────────────────────────────────────
+const ROLE_LABELS = { super_admin: 'Super Admin', admin: 'Admin', encoder: 'Encoder' };
+function openMyAccountModal() {
+  document.getElementById('acctAvatar').src = document.getElementById('userAvatar').src || '';
+  document.getElementById('acctName').textContent = currentUserName || 'Staff Account';
+  document.getElementById('acctEmail').textContent = document.getElementById('userEmail').textContent || '';
+  document.getElementById('acctRoleBadge').textContent = ROLE_LABELS[currentUserRole] || currentUserRole;
+  document.getElementById('myAccountModal').classList.add('open');
+}
+function closeMyAccountModal() {
+  document.getElementById('myAccountModal').classList.remove('open');
+}
+
+// ── SETTINGS MODAL (dark mode + rows per page) ──────────────────────────
+function applySavedTheme() {
+  const dark = localStorage.getItem('enreg_darkMode') === '1';
+  document.body.classList.toggle('dark', dark);
+  const toggle = document.getElementById('darkModeToggle');
+  if (toggle) toggle.checked = dark;
+}
+function toggleDarkMode(on) {
+  localStorage.setItem('enreg_darkMode', on ? '1' : '0');
+  document.body.classList.toggle('dark', on);
+}
+function changePageSize(val) {
+  PAGE_SIZE = parseInt(val, 10) || 50;
+  localStorage.setItem('enreg_pageSize', String(PAGE_SIZE));
+  currentPage = 1;
+  renderTable(currentFilteredRecords);
+}
+function openSettingsModal() {
+  document.getElementById('darkModeToggle').checked = document.body.classList.contains('dark');
+  document.getElementById('pageSizeSelect').value = String(PAGE_SIZE);
+  document.getElementById('settingsModal').classList.add('open');
+}
+function closeSettingsModal() {
+  document.getElementById('settingsModal').classList.remove('open');
+}
+
 function handleLogout() {
   currentIdToken = null;
   currentUserRole = 'admin';
@@ -1288,6 +1411,7 @@ function handleLogout() {
 }
 
 window.addEventListener('load', () => {
+  applySavedTheme();
   google.accounts.id.initialize({
     client_id: GOOGLE_CLIENT_ID,
     callback: handleCredentialResponse,
@@ -2062,7 +2186,7 @@ let currentFilteredRecords = [];
 let sortCol = -1, sortAsc = true;
 let selectedRows = new Set();
 let currentPage = 1;
-const PAGE_SIZE = 50;
+let PAGE_SIZE = parseInt(localStorage.getItem('enreg_pageSize'), 10) || 50;
 
 async function loadRecords() {
   document.getElementById('recordsBody').innerHTML =
