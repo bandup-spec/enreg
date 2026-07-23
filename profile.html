@@ -6,6 +6,7 @@
 <title>Student Hub</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
   /* ── ID card offscreen renderer (for "Download My ID Card") ──────────────
@@ -849,7 +850,14 @@ function renderMyProfilePanel() {
         <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
           <img id="idc_preview" src="" alt="" style="width:140px;border-radius:10px;box-shadow:var(--shadow);display:none;background:var(--bg);">
           <div id="idc_placeholder" class="ro-value" style="color:var(--muted);">Loading your card…</div>
-          <button class="btn btn-primary" id="idc_downloadBtn" onclick="downloadMyIdCard()" style="display:none;">⬇ Download My ID Card (PNG)</button>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <button class="btn btn-primary" id="idc_downloadBtn" onclick="downloadMyIdCard()" style="display:none;">⬇ Download My ID Card (PNG)</button>
+            <button class="btn btn-ghost btn-sm" id="idc_qrBtn" onclick="toggleMyQr()" style="display:none;">Show Verification QR</button>
+          </div>
+          <div id="idc_qrWrap" style="display:none;text-align:center;">
+            <div id="idc_qrCode"></div>
+            <span class="field-hint" style="display:block;margin-top:6px;">Staff can scan this to verify your Student ID.</span>
+          </div>
         </div>
       </div>
     </div>
@@ -1202,6 +1210,7 @@ async function loadMyIdCard() {
     img.style.display = '';
     placeholder.style.display = 'none';
     btn.style.display = '';
+    document.getElementById('idc_qrBtn').style.display = '';
   } catch (e) {
     placeholder.textContent = 'Could not render your ID card right now.';
   }
@@ -1214,6 +1223,31 @@ function downloadMyIdCard() {
   link.download = `id_card_${(myRecord.studentId || 'me').toString().replace(/[^a-z0-9]/gi, '_')}.png`;
   link.href = img.dataset.rendered;
   link.click();
+}
+
+// Simple offline-verifiable QR — encodes the Student ID + name as plain
+// text so any staff member's phone (any QR scanner app, no special
+// verify page needed) can read it and cross-check against the registry.
+let _qrGenerated = false;
+function toggleMyQr() {
+  const wrap = document.getElementById('idc_qrWrap');
+  const btn  = document.getElementById('idc_qrBtn');
+  const showing = wrap.style.display !== 'none';
+  if (showing) {
+    wrap.style.display = 'none';
+    btn.textContent = 'Show Verification QR';
+    return;
+  }
+  if (!_qrGenerated) {
+    const payload = `ENREG-STUDENT|${myRecord.studentId || ''}|${myRecord.fullName || ''}`;
+    new QRCode(document.getElementById('idc_qrCode'), {
+      text: payload, width: 120, height: 120,
+      colorDark: '#111827', colorLight: '#ffffff',
+    });
+    _qrGenerated = true;
+  }
+  wrap.style.display = '';
+  btn.textContent = 'Hide Verification QR';
 }
 
 // ── ACCOUNT SECURITY (Student ID + Password accounts only) ────────────────
