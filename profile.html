@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Student Hub</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
@@ -175,6 +174,8 @@
   .tab-panel { display: none; animation: fadeUp .2s ease; }
   .tab-panel.active { display: block; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width: 22px; height: 22px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
 
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
   .card-header { padding: 18px 24px 15px; border-bottom: 1px solid var(--border); }
@@ -282,23 +283,14 @@
           <div class="lf-item"><div class="lf-icon">👥</div> Browse your classmates and campus</div>
           <div class="lf-item"><div class="lf-icon">📣</div> Never miss a school announcement</div>
         </div>
-        <div id="gsiButtonWrap"></div>
+        <div id="gsiButtonWrap" style="display:none;"></div>
         <div class="login-msg" id="loginMsg"></div>
 
-        <div class="login-divider"><span>or sign in with your Student ID</span></div>
-        <form class="student-login-form" onsubmit="event.preventDefault(); handleStudentIdSubmit();">
-          <div class="field">
-            <label>Student ID</label>
-            <input type="text" id="stuLoginId" placeholder="e.g. 122" autocomplete="username" oninput="resetStudentStage()">
-          </div>
-          <div class="field" id="stuPassField" style="display:none;">
-            <label id="stuPassLabel">Password</label>
-            <input type="password" id="stuLoginPass" placeholder="Enter your password" autocomplete="current-password">
-          </div>
-          <span class="field-hint" id="stuPassHint" style="display:none;"></span>
-          <button type="submit" id="stuLoginBtn">Continue</button>
-        </form>
-        <div class="login-msg" id="stuLoginMsg"></div>
+        <div style="margin-top:28px;padding:20px;border:1px solid var(--border);border-radius:var(--radius);text-align:center;">
+          <div class="spinner" style="margin:0 auto 10px;"></div>
+          <p style="font-size:13.5px;color:var(--muted);margin:0;">Taking you to sign in…</p>
+          <p style="font-size:12px;color:var(--muted);margin:8px 0 0;">Not redirected automatically? <a href="index.html" style="color:var(--accent-dk);font-weight:700;">Click here to sign in</a>.</p>
+        </div>
       </div>
       <div class="id-stack">
         <div class="id-card id-card-1"><div class="id-card-inner">
@@ -566,137 +558,27 @@ async function enterAsStudent(studentId, studentPassword) {
   return true;
 }
 
-// Staged Student ID + Password form: Student ID first (looked up so we know
-// whether to prompt for an existing password or let them create one),
-// password revealed only once the ID is confirmed.
-let stuIdConfirmed = false;
-
-function resetStudentStage() {
-  if (!stuIdConfirmed) return;
-  stuIdConfirmed = false;
-  document.getElementById('stuPassField').style.display = 'none';
-  document.getElementById('stuPassHint').style.display = 'none';
-  document.getElementById('stuLoginPass').value = '';
-  document.getElementById('stuLoginBtn').textContent = 'Continue';
-  document.getElementById('stuLoginMsg').textContent = '';
-  document.getElementById('stuLoginMsg').className = 'login-msg';
-}
-
-async function handleStudentIdSubmit() {
-  if (stuIdConfirmed) { studentPasswordLogin(); return; }
-
-  const studentId = document.getElementById('stuLoginId').value.trim();
-  const msgEl = document.getElementById('stuLoginMsg');
-  const btn   = document.getElementById('stuLoginBtn');
-
-  if (!studentId) {
-    msgEl.textContent = 'Please enter your Student ID.';
-    msgEl.className = 'login-msg error';
-    return;
-  }
-
-  msgEl.className = 'login-msg';
-  btn.disabled = true;
-  btn.textContent = 'Checking…';
-
-  try {
-    const res  = await fetch(GAS_URL + '?action=checkStudentId&studentId=' + encodeURIComponent(studentId));
-    const data = await res.json();
-    if (!data.exists) {
-      msgEl.textContent = 'No student found with that Student ID.';
-      msgEl.className = 'login-msg error';
-      btn.disabled = false;
-      btn.textContent = 'Continue';
-      return;
-    }
-
-    stuIdConfirmed = true;
-    const passField = document.getElementById('stuPassField');
-    const passLabel = document.getElementById('stuPassLabel');
-    const passHint  = document.getElementById('stuPassHint');
-    const passInput = document.getElementById('stuLoginPass');
-    passField.style.display = '';
-    if (data.hasPassword) {
-      passLabel.textContent = 'Password';
-      passInput.placeholder = 'Enter your password';
-      passHint.style.display = 'none';
-      btn.textContent = 'Sign In';
-    } else {
-      passLabel.textContent = 'Create a Password';
-      passInput.placeholder = 'Create a password';
-      passHint.textContent = 'This Student ID has no password yet — whatever you type here becomes your password.';
-      passHint.style.display = '';
-      btn.textContent = 'Create Password & Sign In';
-    }
-    msgEl.textContent = '';
-    msgEl.className = 'login-msg';
-    btn.disabled = false;
-    passInput.focus();
-  } catch (e) {
-    msgEl.textContent = 'Connection error. Please try again.';
-    msgEl.className = 'login-msg error';
-    btn.disabled = false;
-    btn.textContent = 'Continue';
-  }
-}
-
-async function studentPasswordLogin() {
-  const studentId       = document.getElementById('stuLoginId').value.trim();
-  const studentPassword = document.getElementById('stuLoginPass').value;
-  const msgEl = document.getElementById('stuLoginMsg');
-  const btn   = document.getElementById('stuLoginBtn');
-
-  if (!studentId || !studentPassword) {
-    msgEl.textContent = 'Please enter your Student ID and password.';
-    msgEl.className = 'login-msg error';
-    return;
-  }
-
-  msgEl.className = 'login-msg';
-  btn.disabled = true;
-  btn.textContent = 'Signing in…';
-
-  try {
-    const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'studentLogin', studentId, studentPassword }) });
-    const data = await res.json();
-    if (data.status === 'ok') {
-      msgEl.textContent = data.isNewPassword ? 'Password created!' : 'Welcome back!';
-      msgEl.className = 'login-msg success';
-      await enterAsStudent(studentId, studentPassword);
-    } else {
-      msgEl.textContent = data.message || 'Invalid Student ID or password.';
-      msgEl.className = 'login-msg error';
-      btn.disabled = false;
-      btn.textContent = 'Sign In';
-    }
-  } catch (e) {
-    msgEl.textContent = 'Connection error. Please try again.';
-    msgEl.className = 'login-msg error';
-    btn.disabled = false;
-    btn.textContent = 'Sign In';
-  }
-}
-
-window.addEventListener('load', () => {
-  // If the student already signed in via Student ID + Password on the
-  // Enrollment Registry login screen, resume that session here directly —
-  // no second login screen.
+window.addEventListener('load', async () => {
+  // profile.html is no longer a standalone login screen — the Enrollment
+  // Registry (index.html) is the single sign-in page for everyone, and
+  // hands a signed-in student off here via sessionStorage so they don't
+  // have to sign in a second time. If neither handoff is present (e.g.
+  // someone bookmarked this page directly), send them to sign in there.
   let handoff = null;
   try { handoff = JSON.parse(sessionStorage.getItem('studentAuth') || 'null'); } catch (e) {}
   if (handoff && handoff.studentId && handoff.studentPassword) {
-    enterAsStudent(handoff.studentId, handoff.studentPassword);
+    await enterAsStudent(handoff.studentId, handoff.studentPassword);
+    return;
   }
 
-  google.accounts.id.initialize({
-    client_id: GOOGLE_CLIENT_ID,
-    callback: handleCredentialResponse,
-    auto_select: !handoff,
-  });
-  google.accounts.id.renderButton(
-    document.getElementById('gsiButtonWrap'),
-    { theme: 'filled_blue', size: 'large', shape: 'pill', text: 'signin_with' }
-  );
-  if (!handoff) google.accounts.id.prompt();
+  const googleHandoff = sessionStorage.getItem('studentGoogleAuth');
+  if (googleHandoff) {
+    sessionStorage.removeItem('studentGoogleAuth'); // one-time use
+    await handleCredentialResponse({ credential: googleHandoff });
+    return;
+  }
+
+  window.location.href = 'index.html';
 });
 
 // ── SMALL HELPERS ────────────────────────────────────────────────────────
@@ -852,6 +734,7 @@ function renderMyProfilePanel() {
           <div id="idc_placeholder" class="ro-value" style="color:var(--muted);">Loading your card…</div>
           <div style="display:flex;flex-direction:column;gap:8px;">
             <button class="btn btn-primary" id="idc_downloadBtn" onclick="downloadMyIdCard()" style="display:none;">⬇ Download My ID Card (PNG)</button>
+            <button class="btn btn-ghost btn-sm" id="idc_printBtn" onclick="printMyIdCard()" style="display:none;">🖨 Print</button>
             <button class="btn btn-ghost btn-sm" id="idc_qrBtn" onclick="toggleMyQr()" style="display:none;">Show Verification QR</button>
           </div>
           <div id="idc_qrWrap" style="display:none;text-align:center;">
@@ -1210,6 +1093,7 @@ async function loadMyIdCard() {
     img.style.display = '';
     placeholder.style.display = 'none';
     btn.style.display = '';
+    document.getElementById('idc_printBtn').style.display = '';
     document.getElementById('idc_qrBtn').style.display = '';
   } catch (e) {
     placeholder.textContent = 'Could not render your ID card right now.';
@@ -1223,6 +1107,27 @@ function downloadMyIdCard() {
   link.download = `id_card_${(myRecord.studentId || 'me').toString().replace(/[^a-z0-9]/gi, '_')}.png`;
   link.href = img.dataset.rendered;
   link.click();
+}
+
+// Prints directly from the browser — no download step. The popup's @page
+// size is locked to the real 58×88mm card, so the printer dialog is
+// already scaled correctly.
+function printMyIdCard() {
+  const img = document.getElementById('idc_preview');
+  if (!img.dataset.rendered) return;
+  const win = window.open('', '_blank', 'width=400,height=650');
+  if (!win) { return; }
+  win.document.write(`
+    <!DOCTYPE html><html><head><title>Print ID Card</title>
+    <style>
+      @page { size: 58mm 88mm; margin: 0; }
+      * { margin: 0; padding: 0; }
+      img { width: 58mm; height: 88mm; display: block; object-fit: cover; }
+    </style>
+    </head><body><img src="${img.dataset.rendered}"></body></html>
+  `);
+  win.document.close();
+  win.onload = () => { win.focus(); win.print(); };
 }
 
 // Simple offline-verifiable QR — encodes the Student ID + name as plain
