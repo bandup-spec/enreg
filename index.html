@@ -531,6 +531,7 @@
       <div id="acctName" style="font-weight:700;font-size:16px;color:var(--text);"></div>
       <div id="acctEmail" style="font-size:13px;color:var(--muted);margin-top:2px;"></div>
       <span id="acctRoleBadge" class="stat-badge" style="margin-top:12px;display:inline-block;"></span>
+      <button class="btn btn-ghost btn-sm" onclick="goToStudentHub()" style="margin-top:16px;width:100%;">View My Profile (Student Hub) →</button>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost btn-sm" onclick="closeMyAccountModal()">Close</button>
@@ -1435,6 +1436,15 @@ function openMyAccountModal() {
 }
 function closeMyAccountModal() {
   document.getElementById('myAccountModal').classList.remove('open');
+}
+// Same handoff mechanism used to send Google-linked students to the
+// Student Hub without a second sign-in — works for admins/encoders too,
+// since profile.html's Classmates and Announcements tabs work for any
+// authenticated staff role (only "My Profile" needs an actual student
+// record, which staff accounts don't have).
+function goToStudentHub() {
+  sessionStorage.setItem('studentGoogleAuth', currentIdToken);
+  window.location.href = 'profile.html';
 }
 
 // ── SETTINGS MODAL (dark mode + rows per page) ──────────────────────────
