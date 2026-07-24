@@ -420,6 +420,10 @@ let allAnnouncements   = [];
 let lastComputedNotifs = [];
 
 function isAdmin() { return currentUserRole === 'admin' || currentUserRole === 'super_admin'; }
+// Posting is open to any staff tier (admin, super_admin, encoder); deleting
+// and pinning others' posts stays admin-tier only (isAdmin()) — moderation
+// is more sensitive than just being able to post.
+function canPostAnnouncements() { return isAdmin() || currentUserRole === 'encoder'; }
 
 // ── AUTH HELPERS ─────────────────────────────────────────────────────────
 function withAuth(url) {
@@ -651,7 +655,7 @@ function renderProfileHeader() {
         <div class="ph-avatar-wrap"><div class="ph-avatar-placeholder">${escapeHtml((document.getElementById('userName').textContent || '?')[0] || '?')}</div></div>
         <div class="ph-name">${escapeHtml(document.getElementById('userName').textContent || 'Staff account')}</div>
         <div class="ph-badges"><span class="ph-badge warn">${currentUserRole === 'admin' ? 'Admin' : currentUserRole === 'super_admin' ? 'Super Admin' : 'Encoder'}</span></div>
-        <div class="ph-staff-note">This account isn't linked to a student record, so there's no personal profile to edit here. You can still browse Classmates${isAdmin() ? ' and post to Announcements' : ''}.</div>
+        <div class="ph-staff-note">This account isn't linked to a student record, so there's no personal profile to edit here. You can still browse Classmates${canPostAnnouncements() ? ' and post to Announcements' : ''}.</div>
       </div>`;
     return;
   }
@@ -677,7 +681,7 @@ function renderProfileHeader() {
 function renderMyProfilePanel() {
   const wrap = document.getElementById('profileFormWrap');
   if (!myRecord) {
-    const msg = isAdmin() || currentUserRole === 'encoder'
+    const msg = canPostAnnouncements()
       ? "You're signed in as staff — there's no student record tied to your account. Browse Classmates or Announcements instead."
       : "Nothing to edit here yet.";
     wrap.innerHTML = `<div class="card"><div class="card-body">${emptyState(msg)}</div></div>`;
@@ -1208,7 +1212,7 @@ async function loadAnnouncements() {
   } catch (e) { /* silent — wall just stays empty */ }
 }
 function renderWall() {
-  document.getElementById('composerCard').style.display = isAdmin() ? '' : 'none';
+  document.getElementById('composerCard').style.display = canPostAnnouncements() ? '' : 'none';
   const wrap = document.getElementById('wallList');
   if (!allAnnouncements.length) { wrap.innerHTML = emptyState('No announcements yet.'); return; }
   wrap.innerHTML = allAnnouncements.map(a => `
