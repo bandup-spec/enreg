@@ -1277,7 +1277,10 @@ async function handleCredentialResponse(response) {
       // an error, send them to the Student Hub, which is the correct portal
       // for that account type.
       showLoginMsg("This account isn't set up for staff access. Redirecting you to the Student Hub…", 'info');
-      setTimeout(() => { window.location.href = 'profile.html'; }, 1800);
+      // Hand off the same Google credential so profile.html can sign them
+      // in directly — no second Google sign-in prompt needed.
+      sessionStorage.setItem('studentGoogleAuth', currentIdToken);
+      setTimeout(() => { window.location.href = 'profile.html'; }, 1200);
     } else {
       showLoginMsg('Connection error. Please try again.', 'error');
     }
