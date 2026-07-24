@@ -677,7 +677,10 @@ function renderProfileHeader() {
 function renderMyProfilePanel() {
   const wrap = document.getElementById('profileFormWrap');
   if (!myRecord) {
-    wrap.innerHTML = `<div class="card"><div class="card-body">${emptyState("Nothing to edit here yet.")}</div></div>`;
+    const msg = isAdmin() || currentUserRole === 'encoder'
+      ? "You're signed in as staff — there's no student record tied to your account. Browse Classmates or Announcements instead."
+      : "Nothing to edit here yet.";
+    wrap.innerHTML = `<div class="card"><div class="card-body">${emptyState(msg)}</div></div>`;
     return;
   }
   wrap.innerHTML = `
