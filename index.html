@@ -283,6 +283,7 @@
 
   /* ── ROLE-BASED PERMISSIONS (encoder = add/view only, no edit/archive/bulk) */
   .role-encoder #bulkBar { display: none !important; }
+  .role-encoder #tabActivityBtn { display: none !important; }
   .role-encoder #recordsTable th:nth-child(1),
   .role-encoder #recordsTable td:nth-child(1) { display: none; }
   .role-encoder #recordsTable tr { cursor: default; }
@@ -293,6 +294,7 @@
      enforced server-side in code.gs regardless of this CSS. */
   .role-student .tabs .tab:nth-child(1),
   .role-student .tabs .tab:nth-child(2) { display: none !important; }
+  .role-student #tabActivityBtn { display: none !important; }
   .role-student #bulkBar { display: none !important; }
   .role-student #recordsTable th:nth-child(1),
   .role-student #recordsTable td:nth-child(1) { display: none; }
@@ -836,6 +838,8 @@
     <button class="tab active" onclick="switchTab('add')">Add Student</button>
     <button class="tab" onclick="switchTab('import')">Bulk Import</button>
     <button class="tab" onclick="switchTab('records')">Records</button>
+    <button class="tab" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab" id="tabActivityBtn" onclick="switchTab('activity')">Activity Log</button>
   </div>
 
   <!-- TAB: ADD -->
@@ -1041,6 +1045,13 @@
           <option value="all">Active + Archived</option>
           <option value="archived">Archived only</option>
         </select>
+        <select id="searchDataQuality" onchange="filterTable()">
+          <option value="">All records</option>
+          <option value="no_photo">Missing photo</option>
+          <option value="no_course">Missing course</option>
+          <option value="no_campus">Missing campus</option>
+          <option value="incomplete">Any missing info</option>
+        </select>
         <select id="sortDropdown" onchange="sortFromDropdown()">
           <option value="">Sort by…</option>
           <optgroup label="ID">
@@ -1121,6 +1132,26 @@
         </table>
       </div>
       <div class="pagination-bar" id="paginationBar"></div>
+    </div>
+  </div>
+
+  <!-- TAB: DASHBOARD -->
+  <div class="tab-panel" id="tab-dashboard">
+    <div id="dashboardWrap"><!-- rendered by renderDashboard() --></div>
+  </div>
+
+  <!-- TAB: ACTIVITY LOG -->
+  <div class="tab-panel" id="tab-activity">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Activity Log</div>
+        <div class="card-sub">Recent changes made by admins and encoders — who changed what, and when.</div>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div id="activityLogWrap" style="max-height:70vh;overflow-y:auto;">
+          <div class="empty-state"><p>Loading…</p></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1671,10 +1702,111 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['add','import','records'][i] === name));
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['add','import','records','dashboard','activity'][i] === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'records') loadRecords();
+  if (name === 'dashboard') renderDashboard();
+  if (name === 'activity') loadActivityLog();
+}
+
+// ── DASHBOARD ────────────────────────────────────────────────────────────
+function simpleBarChart(title, counts) {
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const max = Math.max(1, ...entries.map(e => e[1]));
+  return `
+    <div class="card" style="flex:1;min-width:280px;">
+      <div class="card-header"><div class="card-title">${title}</div></div>
+      <div class="card-body">
+        ${entries.length ? entries.map(([label, count]) => `
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <div style="width:110px;font-size:12.5px;color:var(--text-2);flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+            <div style="flex:1;background:var(--bg);border-radius:6px;overflow:hidden;height:18px;">
+              <div style="width:${(count/max*100).toFixed(1)}%;background:var(--accent);height:100%;border-radius:6px;"></div>
+            </div>
+            <div style="width:34px;text-align:right;font-size:12.5px;font-weight:700;color:var(--text);">${count}</div>
+          </div>
+        `).join('') : `<div class="field-hint">No data yet.</div>`}
+      </div>
+    </div>`;
+}
+function renderDashboard() {
+  const wrap = document.getElementById('dashboardWrap');
+  const active = allRecords.filter(r => !r.archived);
+
+  const byCampus = {}, byCourse = {}, byMonth = {};
+  active.forEach(r => {
+    const campus = r.campus || 'Unassigned';
+    byCampus[campus] = (byCampus[campus] || 0) + 1;
+    const course = r.course || 'Unassigned';
+    byCourse[course] = (byCourse[course] || 0) + 1;
+    if (r.dateStarted) {
+      const m = r.dateStarted.toString().slice(0, 7); // "YYYY-MM"
+      if (/^\d{4}-\d{2}/.test(m)) byMonth[m] = (byMonth[m] || 0) + 1;
+    }
+  });
+  // Last 12 months, oldest first, labeled nicely.
+  const monthsSorted = Object.keys(byMonth).sort().slice(-12);
+  const byMonthLabeled = {};
+  monthsSorted.forEach(m => {
+    const [y, mo] = m.split('-');
+    const label = new Date(parseInt(y), parseInt(mo) - 1, 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    byMonthLabeled[label] = byMonth[m];
+  });
+
+  const missingPhoto  = active.filter(r => !r.photo).length;
+  const missingCourse = active.filter(r => !r.course).length;
+  const missingCampus = active.filter(r => !r.campus).length;
+
+  wrap.innerHTML = `
+    <div class="stats-bar" style="margin-bottom:18px;">
+      <div class="stat-box"><div class="stat-text"><div class="stat-num">${active.length}</div><div class="stat-label">Active Students</div></div></div>
+      <div class="stat-box"><div class="stat-text"><div class="stat-num">${allRecords.length - active.length}</div><div class="stat-label">Archived</div></div></div>
+      <div class="stat-box"><div class="stat-text"><div class="stat-num">${Object.keys(byCampus).length}</div><div class="stat-label">Campuses</div></div></div>
+      <div class="stat-box"><div class="stat-text"><div class="stat-num">${missingPhoto}</div><div class="stat-label">Missing Photo</div></div></div>
+    </div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;">
+      ${simpleBarChart('Students by Campus', byCampus)}
+      ${simpleBarChart('Students by Course', byCourse)}
+    </div>
+    <div style="margin-top:18px;">
+      ${simpleBarChart('Enrollment Trend (by start month, last 12 months)', byMonthLabeled)}
+    </div>
+  `;
+}
+
+// ── ACTIVITY LOG ─────────────────────────────────────────────────────────
+async function loadActivityLog() {
+  const wrap = document.getElementById('activityLogWrap');
+  wrap.innerHTML = `<div class="empty-state"><p><span class="spinner"></span> Loading…</p></div>`;
+  try {
+    const res  = await fetch(withAuth(GAS_URL + '?action=getAuditLog&limit=200'));
+    const data = await res.json();
+    if (data.status === 'error' && data.code === 401) { handleAuthError(); return; }
+    if (data.status !== 'ok') { wrap.innerHTML = `<div class="empty-state"><p>${escapeHtml(data.message || 'Could not load activity log.')}</p></div>`; return; }
+    if (!data.log.length) { wrap.innerHTML = `<div class="empty-state"><p>No activity recorded yet.</p></div>`; return; }
+    wrap.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="text-align:left;border-bottom:1px solid var(--border);">
+          <th style="padding:10px 16px;font-size:11.5px;color:var(--muted);">Time</th>
+          <th style="padding:10px 16px;font-size:11.5px;color:var(--muted);">User</th>
+          <th style="padding:10px 16px;font-size:11.5px;color:var(--muted);">Action</th>
+          <th style="padding:10px 16px;font-size:11.5px;color:var(--muted);">Details</th>
+        </tr></thead>
+        <tbody>
+          ${data.log.map(e => `
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:9px 16px;font-size:12.5px;color:var(--muted);white-space:nowrap;">${escapeHtml(e.timestamp)}</td>
+              <td style="padding:9px 16px;font-size:12.5px;">${escapeHtml(e.user)}</td>
+              <td style="padding:9px 16px;font-size:12.5px;font-weight:600;">${escapeHtml(e.action)}</td>
+              <td style="padding:9px 16px;font-size:12.5px;color:var(--text-2);">${escapeHtml(e.details)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+  } catch (e) {
+    wrap.innerHTML = `<div class="empty-state"><p>Connection error.</p></div>`;
+  }
 }
 
 function toast(msg, type = 'info') {
@@ -2225,21 +2357,44 @@ function previewImport() {
     return;
   }
 
-  body.innerHTML = importedRows.map(r => `
-    <tr>
-      <td class="td-name">${r.fullName}</td>
+  // Duplicate check — flags a row if its name matches another row already
+  // in this batch, OR an existing active student. Doesn't block the
+  // import (names can legitimately repeat), just flags it for a second look.
+  const existingNames = new Set(allRecords.filter(r => !r.archived).map(r => normalizeSearchText(r.fullName || '')));
+  const nameCounts = {};
+  importedRows.forEach(r => {
+    const key = normalizeSearchText(r.fullName || '');
+    nameCounts[key] = (nameCounts[key] || 0) + 1;
+  });
+  let dupCount = 0;
+  importedRows.forEach(r => {
+    const key = normalizeSearchText(r.fullName || '');
+    r._dupInBatch    = key && nameCounts[key] > 1;
+    r._dupInExisting = key && existingNames.has(key);
+    if (r._dupInBatch || r._dupInExisting) dupCount++;
+  });
+
+  body.innerHTML = importedRows.map(r => {
+    const isDup = r._dupInBatch || r._dupInExisting;
+    const dupNote = r._dupInExisting ? 'Matches an existing student'
+                  : r._dupInBatch ? 'Repeated in this batch' : '';
+    return `
+    <tr style="${isDup ? 'background:var(--warn-lt);' : ''}">
+      <td class="td-name">${r.fullName}${isDup ? ` <span title="${dupNote}" style="color:var(--warn);font-weight:700;">⚠ dup</span>` : ''}</td>
       <td class="td-muted">${r.country}</td>
       <td>${courseBadge(r.course)}</td>
       <td class="td-muted">${r.type}</td>
       <td class="td-muted">${r.dateStarted}</td>
       <td class="td-muted">${r.dateGrad}</td>
       <td class="td-muted">${r.memo}</td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 
   wrap.style.display = 'block';
   btn.disabled = false;
-  toast(`${importedRows.length} record(s) ready to import.`, 'info');
+  toast(dupCount
+    ? `${importedRows.length} record(s) ready — ${dupCount} possible duplicate name(s) flagged in orange.`
+    : `${importedRows.length} record(s) ready to import.`, dupCount ? 'error' : 'info');
 }
 
 async function runImport() {
@@ -2522,14 +2677,25 @@ function filterTable() {
   const school    = document.getElementById('searchSchool').value;
   const campus    = document.getElementById('searchCampus').value;
   const archMode  = document.getElementById('searchArchived').value; // active | all | archived
+  const dq        = document.getElementById('searchDataQuality').value;
   const filtered = allRecords.filter(r => {
     const haystack = normalizeSearchText((r.fullName || '') + ' ' + (r.studentId || ''));
+    const missingPhoto  = !r.photo;
+    const missingCourse = !r.course;
+    const missingCampus = !r.campus;
+    const dqMatch =
+      !dq ||
+      (dq === 'no_photo'   && missingPhoto) ||
+      (dq === 'no_course'  && missingCourse) ||
+      (dq === 'no_campus'  && missingCampus) ||
+      (dq === 'incomplete' && (missingPhoto || missingCourse || missingCampus));
     return qTokens.every(t => haystack.includes(t)) &&
       (!country || (r.country||'').toLowerCase().includes(country)) &&
       (!course  || r.course === course) &&
       (!school  || (school === '__none__' ? !r.isCamp || !r.school : (r.isCamp && r.school === school))) &&
       (!campus  || r.campus === campus) &&
-      (archMode === 'all' || (archMode === 'archived' ? r.archived : !r.archived));
+      (archMode === 'all' || (archMode === 'archived' ? r.archived : !r.archived)) &&
+      dqMatch;
   });
   currentFilteredRecords = filtered;
   currentPage = 1;
@@ -2830,6 +2996,7 @@ function openProfile(rowNo) {
     <div class="profile-footer-actions">
       ${(isAdmin() || isStudent()) ? `<button class="btn btn-ghost btn-sm" onclick="editFromProfile()">Edit Record</button>` : ''}
       <button class="btn btn-ghost btn-sm" onclick="openTemplateModal()">🖼 Template</button>
+      <button class="btn btn-ghost btn-sm" onclick="printIdCard()">🖨 Print</button>
       <button class="btn btn-ghost btn-sm" onclick="downloadIdCard('pdf')">⬇ PDF</button>
       <button class="btn btn-primary btn-sm" onclick="downloadIdCard('png')">⬇ Download ID</button>
     </div>
@@ -3573,6 +3740,46 @@ async function renderCardFrontFor(r) {
   await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
 
   return html2canvas(front, { scale: 2.5, backgroundColor: '#ffffff' });
+}
+
+// Prints the card directly from the browser — no download step. Opens a
+// tiny popup window whose @page size is locked to the real 58×88mm card,
+// so whatever printer dialog appears is already scaled correctly; no
+// "fit to page" guessing needed.
+async function printIdCard() {
+  const r = allRecords.find(rec => rec.rowNo === profileRowNo);
+  if (!r) return;
+  try {
+    const frontCanvas = await renderCardFrontFor(r);
+    const backColorKey = cardColorFor(r);
+    document.getElementById('idcBackImg').src = ID_CARD_ASSETS.backs[backColorKey] || ID_CARD_ASSETS.backs.blue;
+    const backEl     = document.getElementById('idCardBackTemplate');
+    const backCanvas = await html2canvas(backEl, { scale: 2.5, backgroundColor: '#ffffff' });
+
+    const frontUri = frontCanvas.toDataURL('image/png');
+    const backUri  = backCanvas.toDataURL('image/png');
+
+    const win = window.open('', '_blank', 'width=400,height=650');
+    if (!win) { toast('Please allow pop-ups to print.', 'error'); return; }
+    win.document.write(`
+      <!DOCTYPE html><html><head><title>Print ID Card</title>
+      <style>
+        @page { size: 58mm 88mm; margin: 0; }
+        * { margin: 0; padding: 0; }
+        body { display: flex; flex-direction: column; }
+        img { width: 58mm; height: 88mm; display: block; page-break-after: always; object-fit: cover; }
+        img:last-child { page-break-after: auto; }
+      </style>
+      </head><body>
+        <img src="${frontUri}">
+        <img src="${backUri}">
+      </body></html>
+    `);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  } catch (e) {
+    toast('Could not prepare the card for printing.', 'error');
+  }
 }
 
 async function downloadIdCard(format) {
