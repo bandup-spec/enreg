@@ -1207,6 +1207,21 @@
 </div>
 
 <script>
+// Escapes text before dropping it into innerHTML, so record data (names,
+// details, etc.) can never break the markup or inject a stray tag. Used
+// throughout the Dashboard charts and Activity Log — was MISSING entirely
+// before, which is what caused both of those to fail (the ReferenceError
+// happened after a successful fetch, while building the HTML, and got
+// mislabeled as "Connection error" by the surrounding try/catch).
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxq7O4an7fkam6XbhaYMoGZJgPJVEdc98BpxxacENwOKc-jcKv4EJO__m8ZMB5hEEYF/exec';
 
 // ── AUTH (Google Sign-In) ──────────────────────────────────────────────────
