@@ -52,25 +52,35 @@
   .tabs { display: flex; gap: 2px; margin-bottom: 22px; background: var(--border); padding: 3px; border-radius: calc(var(--radius) + 3px); width: fit-content; }
   .tab { padding: 9px 22px; border: none; background: transparent; border-radius: var(--radius); font-family: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .18s; letter-spacing: .1px; display: flex; align-items: center; gap: 7px; }
   .tab.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-xs); }
-  .tab-icon { display: none; font-size: 15px; line-height: 1; }
-  .tabs-mobile-select { display: none; width: 100%; margin-bottom: 22px; padding: 11px 14px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); color: var(--ink); font-family: inherit; font-size: 13.5px; font-weight: 600; -webkit-appearance: none; appearance: none; }
-  .btn-icon { display: none; font-size: 14px; line-height: 1; }
+  .tab-icon { font-size: 15px; line-height: 1; }
+  .tabs-burger-wrap { display: none; position: relative; margin-bottom: 22px; }
+  .tabs-burger-btn { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 10px 14px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); color: var(--ink); font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+  .tabs-burger-btn .chevron { color: var(--muted); font-size: 11px; }
+  .tabs-burger-menu { display: none; position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-md); overflow: hidden; z-index: 150; }
+  .tabs-burger-menu.open { display: block; }
+  .tabs-burger-item { display: block; width: 100%; text-align: left; padding: 11px 14px; border: none; border-bottom: 1px solid var(--border); background: transparent; font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--text); cursor: pointer; }
+  .tabs-burger-item:last-child { border-bottom: none; }
+  .tabs-burger-item:hover { background: var(--bg); }
+  .tabs-burger-item.active { color: var(--accent-dk); background: var(--accent-lt); }
+  .btn-icon { font-size: 14px; line-height: 1; }
+  .header-burger-wrap { display: none; position: relative; }
+  .header-burger-btn { width: 32px; height: 32px; border-radius: 7px; border: 1.5px solid var(--border); background: var(--surface); color: var(--muted); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .header-burger-menu { display: none; position: absolute; top: calc(100% + 8px); right: 0; min-width: 170px; background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-md); overflow: hidden; z-index: 200; }
+  .header-burger-menu.open { display: block; }
+  .header-burger-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 10px 14px; border: none; border-bottom: 1px solid var(--border); background: transparent; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; }
+  .header-burger-item:last-child { border-bottom: none; }
+  .header-burger-item:hover { background: var(--bg); }
+  .header-burger-item.danger:hover { color: var(--danger); background: var(--danger-lt); }
   @media (max-width: 640px) {
-    .tab-label { display: none; }
-    .tab-icon { display: inline-block; }
-    .tab { padding: 9px 13px; }
-  }
-  @media (max-width: 460px) {
     #tabsRow { display: none; }
-    .tabs-mobile-select { display: block; }
+    .tabs-burger-wrap { display: block; }
   }
   @media (max-width: 700px) {
     .logo-text-full { display: none; }
     .logo-text-short { display: inline; }
     .logo-sub { display: none; }
-    .btn-label { display: none; }
-    .btn-icon { display: inline-block; }
-    .logout-btn { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+    .logout-btn { display: none; }
+    .header-burger-wrap { display: block; }
   }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; animation: fadeUp .22s ease; }
@@ -498,8 +508,16 @@
       <img class="user-avatar" id="userAvatar" src="" alt="">
       <span class="user-email" id="userEmail"></span>
       <button class="logout-btn" id="profileBtn" onclick="openMyAccountModal()" title="My profile"><span class="btn-icon">👤</span><span class="btn-label">Profile</span></button>
-      <button class="logout-btn" id="settingsBtn" onclick="openSettingsModal()" title="Settings"><span class="btn-icon">⚙</span><span class="btn-label">⚙ Settings</span></button>
-      <button class="logout-btn" id="logoutBtn" onclick="handleLogout()" title="Sign out"><span class="btn-icon">🚪</span><span class="btn-label">Sign out</span></button>
+      <button class="logout-btn" id="settingsBtn" onclick="openSettingsModal()" title="Settings"><span class="btn-icon">⚙</span><span class="btn-label">Settings</span></button>
+      <button class="logout-btn" id="logoutBtn" onclick="handleLogout()" title="Sign out"><span class="btn-icon">⇥</span><span class="btn-label">Sign out</span></button>
+      <div class="header-burger-wrap">
+        <button class="header-burger-btn" id="headerBurgerBtn" onclick="toggleHeaderMenu(event)" title="Menu" aria-label="Menu">☰</button>
+        <div class="header-burger-menu" id="headerBurgerMenu">
+          <button class="header-burger-item" onclick="closeHeaderMenu();openMyAccountModal()"><span class="btn-icon">👤</span> Profile</button>
+          <button class="header-burger-item" onclick="closeHeaderMenu();openSettingsModal()"><span class="btn-icon">⚙</span> Settings</button>
+          <button class="header-burger-item danger" onclick="closeHeaderMenu();handleLogout()"><span class="btn-icon">⇥</span> Sign out</button>
+        </div>
+      </div>
     </div>
   </div>
 </header>
@@ -912,13 +930,18 @@
     <button class="tab" onclick="switchTab('dashboard')" title="Dashboard"><span class="tab-icon">📊</span><span class="tab-label">Dashboard</span></button>
     <button class="tab" id="tabActivityBtn" onclick="switchTab('activity')" title="Activity Log"><span class="tab-icon">🕘</span><span class="tab-label">Activity Log</span></button>
   </div>
-  <select class="tabs-mobile-select" id="tabsMobileSelect" onchange="switchTab(this.value)" aria-label="Switch section">
-    <option value="add">➕ Add Student</option>
-    <option value="import">📥 Bulk Import</option>
-    <option value="records">📋 Records</option>
-    <option value="dashboard">📊 Dashboard</option>
-    <option value="activity" id="tabActivityOption">🕘 Activity Log</option>
-  </select>
+  <div class="tabs-burger-wrap" id="tabsBurgerWrap">
+    <button class="tabs-burger-btn" id="tabsBurgerBtn" onclick="toggleTabsMenu(event)">
+      <span id="tabsBurgerLabel">➕ Add Student</span><span class="chevron">▾</span>
+    </button>
+    <div class="tabs-burger-menu" id="tabsBurgerMenu">
+      <button class="tabs-burger-item active" data-tab="add" onclick="closeTabsMenu();switchTab('add')">➕ Add Student</button>
+      <button class="tabs-burger-item" data-tab="import" onclick="closeTabsMenu();switchTab('import')">📥 Bulk Import</button>
+      <button class="tabs-burger-item" data-tab="records" onclick="closeTabsMenu();switchTab('records')">📋 Records</button>
+      <button class="tabs-burger-item" data-tab="dashboard" onclick="closeTabsMenu();switchTab('dashboard')">📊 Dashboard</button>
+      <button class="tabs-burger-item" data-tab="activity" id="tabActivityBurgerItem" onclick="closeTabsMenu();switchTab('activity')">🕘 Activity Log</button>
+    </div>
+  </div>
 
   <!-- TAB: ADD -->
   <div class="tab-panel active" id="tab-add">
@@ -1294,15 +1317,12 @@ const STUDENT_LOCKED_FIELD_IDS = ['m_id','m_campus','m_country','m_course','m_ty
 function applyRolePermissions() {
   document.body.classList.toggle('role-encoder', isEncoder());
   document.body.classList.toggle('role-student', isStudent());
-  const tabsSelect = document.getElementById('tabsMobileSelect');
-  if (tabsSelect) {
-    const addOpt = tabsSelect.querySelector('option[value="add"]');
-    const importOpt = tabsSelect.querySelector('option[value="import"]');
-    const activityOpt = document.getElementById('tabActivityOption');
-    if (addOpt) addOpt.style.display = isStudent() ? 'none' : '';
-    if (importOpt) importOpt.style.display = isStudent() ? 'none' : '';
-    if (activityOpt) activityOpt.style.display = (isEncoder() || isStudent()) ? 'none' : '';
-  }
+  const addItem = document.querySelector('.tabs-burger-item[data-tab="add"]');
+  const importItem = document.querySelector('.tabs-burger-item[data-tab="import"]');
+  const activityItem = document.getElementById('tabActivityBurgerItem');
+  if (addItem) addItem.style.display = isStudent() ? 'none' : '';
+  if (importItem) importItem.style.display = isStudent() ? 'none' : '';
+  if (activityItem) activityItem.style.display = (isEncoder() || isStudent()) ? 'none' : '';
   if (isStudent()) {
     // Nothing to add/import as a student — land straight on Records,
     // which (per the backend) will only ever contain their own row.
@@ -1838,12 +1858,43 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['add','import','records','dashboard','activity'][i] === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  const tabsSelect = document.getElementById('tabsMobileSelect');
-  if (tabsSelect) tabsSelect.value = name;
+  const burgerItems = document.querySelectorAll('.tabs-burger-item');
+  burgerItems.forEach(item => item.classList.toggle('active', item.dataset.tab === name));
+  const activeItem = document.querySelector('.tabs-burger-item[data-tab="' + name + '"]');
+  const burgerLabel = document.getElementById('tabsBurgerLabel');
+  if (activeItem && burgerLabel) burgerLabel.textContent = activeItem.textContent;
   if (name === 'records') loadRecords();
   if (name === 'dashboard') renderDashboard();
   if (name === 'activity') loadActivityLog();
 }
+
+// ── BURGER MENUS (mobile header actions + mobile tab switcher) ─────────────
+function closeAllBurgerMenus() {
+  document.querySelectorAll('.header-burger-menu.open, .tabs-burger-menu.open').forEach(m => m.classList.remove('open'));
+}
+function toggleHeaderMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('headerBurgerMenu');
+  const wasOpen = menu.classList.contains('open');
+  closeAllBurgerMenus();
+  if (!wasOpen) menu.classList.add('open');
+}
+function closeHeaderMenu() {
+  const menu = document.getElementById('headerBurgerMenu');
+  if (menu) menu.classList.remove('open');
+}
+function toggleTabsMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('tabsBurgerMenu');
+  const wasOpen = menu.classList.contains('open');
+  closeAllBurgerMenus();
+  if (!wasOpen) menu.classList.add('open');
+}
+function closeTabsMenu() {
+  const menu = document.getElementById('tabsBurgerMenu');
+  if (menu) menu.classList.remove('open');
+}
+document.addEventListener('click', closeAllBurgerMenus);
 
 // ── DASHBOARD ────────────────────────────────────────────────────────────
 function simpleBarChart(title, counts) {
