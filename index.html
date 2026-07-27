@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -103,6 +104,8 @@
   .row-menu button { display: block; width: 100%; text-align: left; padding: 7px 10px; font-size: 12.5px; font-weight: 500; background: none; border: none; border-radius: 5px; cursor: pointer; color: var(--text); white-space: nowrap; }
   .row-menu button:hover { background: var(--bg); }
   .row-menu button.danger-item { color: var(--danger); }
+  .bg-swatch { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--border); cursor: pointer; padding: 0; }
+  .bg-swatch:hover { border-color: var(--accent); }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th { padding: 12px 14px; text-align: left; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); border-bottom: 1.5px solid var(--border); white-space: nowrap; user-select: none; background: #FAFBFC; }
   thead th.sortable { cursor: pointer; transition: color .12s; }
@@ -509,11 +512,57 @@
         <span style="font-size:11px;color:var(--muted);">+</span>
       </div>
       <span class="field-hint">Drag to reposition · use slider to zoom</span>
+      <div style="margin-top:14px;">
+        <button class="btn btn-ghost btn-sm" id="paRemoveBgBtn" onclick="paRemoveBackground()">✂️ Remove Background</button>
+      </div>
+      <div id="paBgColorRow" style="display:none;margin-top:10px;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--muted);">Background:</span>
+        <button type="button" class="bg-swatch" style="background:#FFFFFF" onclick="paSetBgColor('#FFFFFF')" title="White"></button>
+        <button type="button" class="bg-swatch" style="background:#D6E4FF" onclick="paSetBgColor('#D6E4FF')" title="Light Blue"></button>
+        <button type="button" class="bg-swatch" style="background:#FEE2E2" onclick="paSetBgColor('#FEE2E2')" title="Light Red"></button>
+        <button type="button" class="bg-swatch" style="background:#1E3A8A" onclick="paSetBgColor('#1E3A8A')" title="Navy"></button>
+        <button type="button" class="bg-swatch" style="background:#DCFCE7" onclick="paSetBgColor('#DCFCE7')" title="Light Green"></button>
+        <input type="color" id="paCustomColor" value="#FFFFFF" oninput="paSetBgColor(this.value)" title="Custom color" style="width:26px;height:26px;padding:0;border:1.5px solid var(--border);border-radius:50%;cursor:pointer;">
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost btn-sm" onclick="closePhotoAdjustModal()">Cancel</button>
       <div class="ml-auto">
         <button class="btn btn-primary btn-sm" id="paSaveBtn" onclick="savePhotoAdjust()">Save Photo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FIX BACKGROUND MODAL (for photos already saved on a student's profile) -->
+<div class="modal-overlay" id="bgFixModal">
+  <div class="modal" style="max-width:360px;">
+    <div class="modal-header">
+      <span class="modal-title">Remove Background</span>
+      <button class="modal-close" onclick="closeBgFixModal()">✕</button>
+    </div>
+    <div class="modal-body" style="text-align:center;">
+      <div style="width:180px;height:180px;margin:0 auto;border-radius:12px;overflow:hidden;background:#EEF2F5;">
+        <img id="pfImg" src="" alt="" style="width:100%;height:100%;object-fit:cover;">
+      </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-ghost btn-sm" id="pfRemoveBgBtn" onclick="pfRemoveBackground()">✂️ Remove Background</button>
+      </div>
+      <div id="pfBgColorRow" style="display:none;margin-top:10px;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--muted);">Background:</span>
+        <button type="button" class="bg-swatch" style="background:#FFFFFF" onclick="pfSetBgColor('#FFFFFF')" title="White"></button>
+        <button type="button" class="bg-swatch" style="background:#D6E4FF" onclick="pfSetBgColor('#D6E4FF')" title="Light Blue"></button>
+        <button type="button" class="bg-swatch" style="background:#FEE2E2" onclick="pfSetBgColor('#FEE2E2')" title="Light Red"></button>
+        <button type="button" class="bg-swatch" style="background:#1E3A8A" onclick="pfSetBgColor('#1E3A8A')" title="Navy"></button>
+        <button type="button" class="bg-swatch" style="background:#DCFCE7" onclick="pfSetBgColor('#DCFCE7')" title="Light Green"></button>
+        <input type="color" id="pfCustomColor" value="#FFFFFF" oninput="pfSetBgColor(this.value)" title="Custom color" style="width:26px;height:26px;padding:0;border:1.5px solid var(--border);border-radius:50%;cursor:pointer;">
+      </div>
+      <span class="field-hint" style="display:block;margin-top:8px;">Fixes the photo already saved on this student's profile — handy for older photos uploaded before background removal existed.</span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeBgFixModal()">Cancel</button>
+      <div class="ml-auto">
+        <button class="btn btn-primary btn-sm" id="pfSaveBtn" onclick="savePfBgFix()" disabled>Save Photo</button>
       </div>
     </div>
   </div>
@@ -894,7 +943,7 @@
           <!-- Row 3: Country + Course -->
           <div class="field">
             <label>Country of Origin</label>
-            <input type="text" id="country" list="countryList" placeholder="Type to search…" autocomplete="off">
+            <input type="text" id="country" list="countryList" placeholder="Type to search…" autocomplete="off" oninput="regenerateId()">
             <datalist id="countryList"></datalist>
           </div>
           <div class="field">
@@ -1568,7 +1617,7 @@ window.addEventListener('load', () => {
   google.accounts.id.prompt(); // triggers One Tap for returning users
 });
 
-let   nextSeq   = 122;
+let   nextSeq   = 245;
 
 // Country → Nationality Code mapping (commonly used codes; editable after auto-fill)
 const COUNTRY_CODES = {
@@ -1675,8 +1724,26 @@ function populateCountryDropdown() {
   });
 }
 
-function buildId(seq) {
-  return String(seq);
+// Looks up the nationality code for a typed country name (case-insensitive).
+// Returns '' if the country isn't recognized yet (e.g. still being typed).
+function getCountryCode(countryName) {
+  countryName = (countryName || '').trim();
+  if (!countryName) return '';
+  if (COUNTRY_CODES[countryName]) return COUNTRY_CODES[countryName];
+  const found = Object.keys(COUNTRY_CODES).find(k => k.toLowerCase() === countryName.toLowerCase());
+  return found ? COUNTRY_CODES[found] : '';
+}
+
+// Builds a Student ID like "CU-J26245":
+//   CU-          fixed prefix
+//   <code>       nationality code (e.g. "J" for Japan) — blank until a
+//                recognized country is entered
+//   <yy>         last 2 digits of the CURRENT year (computed live, so this
+//                automatically becomes "27" in 2027, etc.)
+//   <seq>        running sequence number, not zero-padded
+function buildId(seq, countryCode) {
+  const yy = String(new Date().getFullYear()).slice(-2);
+  return `CU-${countryCode || ''}${yy}${seq}`;
 }
 
 // Recovers a usable sequence number from any Student ID format we might
@@ -1697,7 +1764,8 @@ function extractSeq(id) {
 }
 
 function regenerateId() {
-  document.getElementById('studentId').value = nextSeq ? buildId(nextSeq) : '';
+  const code = getCountryCode(document.getElementById('country').value);
+  document.getElementById('studentId').value = nextSeq ? buildId(nextSeq, code) : '';
 }
 
 function syncGrad() {
@@ -2421,7 +2489,7 @@ async function runImport() {
   // Pre-assign sequential student IDs client-side so each row gets a unique one
   let seq = nextSeq;
   const rowsWithIds = importedRows.map(r => {
-    const id = buildId(seq);
+    const id = buildId(seq, getCountryCode(r.country));
     seq++;
     return { ...r, studentId: id, campus };
   });
@@ -2466,13 +2534,12 @@ async function loadRecords() {
     const data = await res.json();
     if (data.status === 'error' && data.code === 401) { handleAuthError(); return; }
     allRecords = data.records || [];
-    // Student IDs are now just plain numbers going forward, but older records
-    // may still have the legacy "CU-<code>26<seq>" format (some of them
-    // corrupted by a historical bug that doubled up the "26"). Handle both:
-    //   - legacy format: strip repeated leading "26" pairs to recover the
-    //     true sequence number
-    //   - plain number: parse directly, no stripping (a real sequence like
-    //     260 must not be mistaken for corruption)
+    // Student IDs are "CU-<code><yy><seq>" (e.g. "CU-J26245"). Some older
+    // records may be plain numbers, or corrupted "CU-<code>26<seq>" IDs from
+    // a historical bug that doubled up the "26". extractSeq() handles all
+    // three: strips repeated leading "26" pairs where present, otherwise
+    // parses the trailing digits directly (so a real sequence like 260
+    // isn't mistaken for corruption).
     const seqs = allRecords.map(r => extractSeq(r.studentId));
     if (seqs.length) nextSeq = Math.max(...seqs) + 1;
     // Auto-remember any school names already in the records
@@ -2948,6 +3015,9 @@ function openProfile(rowNo) {
   const photoEditBtn = canUploadPhoto()
     ? `<button class="profile-photo-edit" title="Change photo" onclick="document.getElementById('profilePhotoInput').click()">✎</button>`
     : '';
+  const bgFixBtn = (canUploadPhoto() && r.photo)
+    ? `<button class="profile-photo-edit" style="right:auto;left:0;" title="Remove background" onclick="openBgFixModal(${rowNo})">✂️</button>`
+    : '';
 
   const badges = [
     `<span class="profile-hero-badge">${r.isCamp ? 'Camp' : 'Regular'}</span>`,
@@ -2999,6 +3069,7 @@ function openProfile(rowNo) {
       <div class="profile-photo-wrap">
         ${photoHtml}
         ${photoEditBtn}
+        ${bgFixBtn}
       </div>
       <p class="profile-hero-name">${r.fullName || '—'}</p>
       <p class="profile-hero-id">${r.studentId || '—'}</p>
@@ -3071,6 +3142,64 @@ let paNaturalW = 0, paNaturalH = 0, paScale = 1, paMinScale = 1;
 let paOffsetX = 0, paOffsetY = 0;
 let paDragging = false, paDragStartX = 0, paDragStartY = 0, paStartOffsetX = 0, paStartOffsetY = 0;
 const PA_STAGE = 260;
+// Pristine copy of the selected photo (never overwritten), plus background-
+// removal state. Kept separate from the visible #paImg element so switching
+// between color swatches always re-composites from the true original —
+// otherwise repeated switches would pick up color fringing at the edges.
+let paOrigImg = null, paBgRemoved = false, paMaskCanvas = null, paBgColor = '#FFFFFF';
+
+// ── BACKGROUND REMOVAL (client-side, via MediaPipe Selfie Segmentation) ──
+// Runs fully in the browser — no API key, no external upload of the photo.
+let _selfieSeg = null;
+function getSelfieSeg() {
+  if (_selfieSeg) return _selfieSeg;
+  if (typeof SelfieSegmentation === 'undefined') return null;
+  _selfieSeg = new SelfieSegmentation({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+  });
+  _selfieSeg.setOptions({ modelSelection: 1 }); // 1 = better for half-body / portrait framing
+  return _selfieSeg;
+}
+
+// Runs person segmentation on an already-loaded <img>, resolving a same-size
+// canvas whose red channel is the "person" mask (255 = person, 0 = background).
+function segmentPersonMask(imgEl, w, h) {
+  return new Promise((resolve, reject) => {
+    const seg = getSelfieSeg();
+    if (!seg) { reject(new Error('Segmentation model unavailable.')); return; }
+    seg.onResults((results) => {
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = w; maskCanvas.height = h;
+      maskCanvas.getContext('2d').drawImage(results.segmentationMask, 0, 0, w, h);
+      resolve(maskCanvas);
+    });
+    seg.send({ image: imgEl }).catch(reject);
+  });
+}
+
+// Composites `imgEl` onto a solid `bgColor`, using `maskCanvas` (same
+// dimensions) as the subject's alpha channel. Returns a canvas (fully opaque).
+function compositeOnColor(imgEl, maskCanvas, bgColor) {
+  const w = maskCanvas.width, h = maskCanvas.height;
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const octx = out.getContext('2d');
+  octx.fillStyle = bgColor;
+  octx.fillRect(0, 0, w, h);
+
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(imgEl, 0, 0, w, h);
+  const imgData  = tctx.getImageData(0, 0, w, h);
+  const maskData = maskCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    imgData.data[i + 3] = maskData[i]; // red channel of mask → alpha
+  }
+  tctx.putImageData(imgData, 0, 0);
+  octx.drawImage(tmp, 0, 0);
+  return out;
+}
 
 function handlePhotoSelect(event) {
   const file = event.target.files[0];
@@ -3091,6 +3220,12 @@ function handlePhotoSelect(event) {
       paOffsetY = paNaturalH > paNaturalW
         ? Math.min(0, centeredY + (PA_STAGE - paNaturalH * paScale) * 0.15)
         : centeredY;
+
+      paOrigImg    = img;   // pristine reference used for (re-)compositing
+      paBgRemoved  = false;
+      paMaskCanvas = null;
+      paBgColor    = '#FFFFFF';
+      document.getElementById('paBgColorRow').style.display = 'none';
 
       const paImg = document.getElementById('paImg');
       paImg.src = reader.result;
@@ -3164,10 +3299,39 @@ document.addEventListener('DOMContentLoaded', () => {
 function closePhotoAdjustModal() {
   document.getElementById('photoAdjustModal').classList.remove('open');
   document.getElementById('paImg').src = '';
+  paOrigImg = null; paBgRemoved = false; paMaskCanvas = null;
+  document.getElementById('paBgColorRow').style.display = 'none';
 }
 document.getElementById('photoAdjustModal').addEventListener('click', function(e) {
   if (e.target === this) closePhotoAdjustModal();
 });
+
+async function paRemoveBackground() {
+  if (!paOrigImg) return;
+  const btn = document.getElementById('paRemoveBgBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Removing…';
+  try {
+    paMaskCanvas = await segmentPersonMask(paOrigImg, paNaturalW, paNaturalH);
+    paBgRemoved = true;
+    document.getElementById('paBgColorRow').style.display = 'flex';
+    paSetBgColor(paBgColor);
+    toast('Background removed — pick a color below.', 'success');
+  } catch (e) {
+    toast('Could not remove background. Try a clearer, well-lit photo.', 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '✂️ Remove Background';
+}
+
+// Re-composites from the PRISTINE original every time, so switching colors
+// repeatedly never accumulates edge fringing from a previous color.
+function paSetBgColor(color) {
+  paBgColor = color;
+  if (!paBgRemoved || !paMaskCanvas || !paOrigImg) return;
+  const composed = compositeOnColor(paOrigImg, paMaskCanvas, paBgColor);
+  document.getElementById('paImg').src = composed.toDataURL('image/png');
+}
 
 async function savePhotoAdjust() {
   if (!profileRowNo) return;
@@ -3199,6 +3363,100 @@ async function savePhotoAdjust() {
       document.getElementById('profilePhotoBox').outerHTML = `<img class="profile-photo" id="profilePhotoBox" src="${dataUri}" alt="">`;
       toast('Photo updated!', 'success');
       closePhotoAdjustModal();
+    } else {
+      toast('Error: ' + (data.message || 'Unknown'), 'error');
+    }
+  } catch (e) {
+    toast('Connection error while uploading photo.', 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Save Photo';
+}
+
+// ── FIX BACKGROUND OF AN ALREADY-SAVED PROFILE PHOTO ─────────────────────
+let pfRowNo = null, pfOrigImg = null, pfMaskCanvas = null, pfBgRemoved = false, pfBgColor = '#FFFFFF';
+
+function openBgFixModal(rowNo) {
+  const r = allRecords.find(rec => rec.rowNo === rowNo);
+  if (!r || !r.photo) { toast('No photo to fix yet.', 'error'); return; }
+  pfRowNo = rowNo;
+  pfBgRemoved = false; pfMaskCanvas = null; pfBgColor = '#FFFFFF';
+  document.getElementById('pfBgColorRow').style.display = 'none';
+  document.getElementById('pfSaveBtn').disabled = true;
+
+  const img = new Image();
+  img.onload = () => { pfOrigImg = img; };
+  img.onerror = () => toast('Could not load this photo.', 'error');
+  img.src = r.photo;
+  document.getElementById('pfImg').src = r.photo;
+  document.getElementById('bgFixModal').classList.add('open');
+}
+
+function closeBgFixModal() {
+  document.getElementById('bgFixModal').classList.remove('open');
+  document.getElementById('pfImg').src = '';
+  pfRowNo = null; pfOrigImg = null; pfMaskCanvas = null; pfBgRemoved = false;
+}
+document.getElementById('bgFixModal').addEventListener('click', function(e) {
+  if (e.target === this) closeBgFixModal();
+});
+
+async function pfRemoveBackground() {
+  if (!pfOrigImg) { toast('Photo is still loading — try again in a moment.', 'error'); return; }
+  const btn = document.getElementById('pfRemoveBgBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Removing…';
+  try {
+    const w = pfOrigImg.naturalWidth || pfOrigImg.width, h = pfOrigImg.naturalHeight || pfOrigImg.height;
+    pfMaskCanvas = await segmentPersonMask(pfOrigImg, w, h);
+    pfBgRemoved = true;
+    document.getElementById('pfBgColorRow').style.display = 'flex';
+    document.getElementById('pfSaveBtn').disabled = false;
+    pfSetBgColor(pfBgColor);
+    toast('Background removed — pick a color below.', 'success');
+  } catch (e) {
+    toast('Could not remove background. Try a clearer, well-lit photo.', 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '✂️ Remove Background';
+}
+
+function pfSetBgColor(color) {
+  pfBgColor = color;
+  if (!pfBgRemoved || !pfMaskCanvas || !pfOrigImg) return;
+  const composed = compositeOnColor(pfOrigImg, pfMaskCanvas, pfBgColor);
+  document.getElementById('pfImg').src = composed.toDataURL('image/png');
+}
+
+async function savePfBgFix() {
+  if (!pfRowNo || !pfBgRemoved) return;
+  const btn = document.getElementById('pfSaveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  // Re-composite fresh from the pristine original + current color choice,
+  // then downscale/compress the same way savePhotoAdjust does.
+  const OUT = 240;
+  const composed = compositeOnColor(pfOrigImg, pfMaskCanvas, pfBgColor);
+  const canvas = document.createElement('canvas');
+  canvas.width = OUT; canvas.height = OUT;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(composed, 0, 0, composed.width, composed.height, 0, 0, OUT, OUT);
+
+  let dataUri = canvas.toDataURL('image/jpeg', 0.7);
+  if (dataUri.length > 45000) dataUri = canvas.toDataURL('image/jpeg', 0.5);
+
+  try {
+    const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload({ action: 'uploadPhoto', rowNo: pfRowNo, photoDataUri: dataUri })) });
+    const data = await res.json();
+    if (data.status === 'error' && data.code === 401) { handleAuthError(); return; }
+    if (data.status === 'ok') {
+      const i = allRecords.findIndex(rec => rec.rowNo === pfRowNo);
+      if (i !== -1) allRecords[i].photo = dataUri;
+      const box = document.getElementById('profilePhotoBox');
+      if (box) box.outerHTML = `<img class="profile-photo" id="profilePhotoBox" src="${dataUri}" alt="">`;
+      toast('Background updated!', 'success');
+      closeBgFixModal();
     } else {
       toast('Error: ' + (data.message || 'Unknown'), 'error');
     }
