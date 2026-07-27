@@ -672,6 +672,18 @@
       </div>
 
       <div class="field" style="margin-top:18px;">
+        <label>Default Landing Tab</label>
+        <select id="defaultTabSelect" onchange="changeDefaultTab(this.value)">
+          <option value="add">Add Student</option>
+          <option value="import">Bulk Import</option>
+          <option value="records">Records</option>
+          <option value="dashboard">Dashboard</option>
+          <option value="activity">Activity Log</option>
+        </select>
+        <span class="field-hint" style="display:block;margin-top:4px;">The section you land on right after signing in, instead of Add Student every time.</span>
+      </div>
+
+      <div class="field" style="margin-top:18px;">
         <label>Default Campus Filter</label>
         <select id="defaultCampusSelect" onchange="changeDefaultCampus(this.value)">
           <option value="">All Campuses</option>
@@ -1424,6 +1436,7 @@ async function handleCredentialResponse(response) {
   resetIdleTimer();
   await loadRecords(); // re-runs the full render pipeline (sorting, filters, dropdowns, etc.)
   applyDefaultCampusFilter();
+  applyDefaultLandingTab();
   loadSchools();
 }
 
@@ -1652,10 +1665,27 @@ function applyDefaultCampusFilter() {
     filterTable();
   }
 }
+
+// ── DEFAULT LANDING TAB ──────────────────────────────────────────────────
+// Which section a non-student user lands on right after signing in, instead
+// of always starting at "Add Student". Students always land on Records
+// regardless of this setting (handled separately in applyRolePermissions).
+function getDefaultTab() { return localStorage.getItem('enreg_defaultTab') || 'add'; }
+function changeDefaultTab(val) { localStorage.setItem('enreg_defaultTab', val); }
+function applyDefaultLandingTab() {
+  if (isStudent()) return; // students always go to Records
+  let tab = getDefaultTab();
+  // Guard against a saved tab that this role can no longer see
+  // (e.g. an encoder who previously had Activity Log saved as default).
+  if (tab === 'activity' && (isEncoder() || isStudent())) tab = 'add';
+  if ((tab === 'add' || tab === 'import') && isStudent()) tab = 'records';
+  switchTab(tab);
+}
 function openSettingsModal() {
   document.getElementById('darkModeToggle').checked = document.body.classList.contains('dark');
   document.getElementById('pageSizeSelect').value = String(PAGE_SIZE);
   document.getElementById('idleTimeoutSelect').value = String(getIdleTimeoutMinutes());
+  document.getElementById('defaultTabSelect').value = getDefaultTab();
   populateDefaultCampusSelect();
   renderColumnVisibilityList();
   document.getElementById('settingsModal').classList.add('open');
