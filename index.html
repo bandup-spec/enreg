@@ -45,12 +45,33 @@
   .logo { display: flex; align-items: center; gap: 11px; }
   .logo-mark { width: 34px; height: 34px; background: linear-gradient(155deg, var(--accent) 0%, var(--accent-dk) 100%); border-radius: 9px; display: flex; align-items: center; justify-content: center; color: white; font-size: 16px; font-weight: 600; font-family: 'DM Serif Display', serif; box-shadow: 0 2px 6px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.2); }
   .logo-text { font-size: 15.5px; font-weight: 700; letter-spacing: -0.4px; color: var(--ink); }
+  .logo-text-short { display: none; }
   .logo-sub { font-size: 11px; color: var(--muted); font-weight: 500; letter-spacing: .1px; }
   .stat-badge { background: var(--accent-lt); color: var(--accent-dk); padding: 5px 13px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: .1px; }
   .page { max-width: 1280px; margin: 0 auto; padding: 30px 24px 60px; }
   .tabs { display: flex; gap: 2px; margin-bottom: 22px; background: var(--border); padding: 3px; border-radius: calc(var(--radius) + 3px); width: fit-content; }
-  .tab { padding: 9px 22px; border: none; background: transparent; border-radius: var(--radius); font-family: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .18s; letter-spacing: .1px; }
+  .tab { padding: 9px 22px; border: none; background: transparent; border-radius: var(--radius); font-family: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .18s; letter-spacing: .1px; display: flex; align-items: center; gap: 7px; }
   .tab.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-xs); }
+  .tab-icon { display: none; font-size: 15px; line-height: 1; }
+  .tabs-mobile-select { display: none; width: 100%; margin-bottom: 22px; padding: 11px 14px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); color: var(--ink); font-family: inherit; font-size: 13.5px; font-weight: 600; -webkit-appearance: none; appearance: none; }
+  .btn-icon { display: none; font-size: 14px; line-height: 1; }
+  @media (max-width: 640px) {
+    .tab-label { display: none; }
+    .tab-icon { display: inline-block; }
+    .tab { padding: 9px 13px; }
+  }
+  @media (max-width: 460px) {
+    #tabsRow { display: none; }
+    .tabs-mobile-select { display: block; }
+  }
+  @media (max-width: 700px) {
+    .logo-text-full { display: none; }
+    .logo-text-short { display: inline; }
+    .logo-sub { display: none; }
+    .btn-label { display: none; }
+    .btn-icon { display: inline-block; }
+    .logout-btn { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+  }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; animation: fadeUp .22s ease; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
@@ -467,7 +488,7 @@
   <div class="logo">
     <div class="logo-mark">E</div>
     <div>
-      <div class="logo-text">Enrollment Registry</div>
+      <div class="logo-text"><span class="logo-text-full">Enrollment Registry</span><span class="logo-text-short">Enreg</span></div>
       <div class="logo-sub">Student Records Management</div>
     </div>
   </div>
@@ -476,9 +497,9 @@
     <div class="user-chip">
       <img class="user-avatar" id="userAvatar" src="" alt="">
       <span class="user-email" id="userEmail"></span>
-      <button class="logout-btn" id="profileBtn" onclick="openMyAccountModal()" title="My profile">Profile</button>
-      <button class="logout-btn" id="settingsBtn" onclick="openSettingsModal()" title="Settings">⚙ Settings</button>
-      <button class="logout-btn" id="logoutBtn" onclick="handleLogout()">Sign out</button>
+      <button class="logout-btn" id="profileBtn" onclick="openMyAccountModal()" title="My profile"><span class="btn-icon">👤</span><span class="btn-label">Profile</span></button>
+      <button class="logout-btn" id="settingsBtn" onclick="openSettingsModal()" title="Settings"><span class="btn-icon">⚙</span><span class="btn-label">⚙ Settings</span></button>
+      <button class="logout-btn" id="logoutBtn" onclick="handleLogout()" title="Sign out"><span class="btn-icon">🚪</span><span class="btn-label">Sign out</span></button>
     </div>
   </div>
 </header>
@@ -884,13 +905,20 @@
 </div>
 
 <div class="page">
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab('add')">Add Student</button>
-    <button class="tab" onclick="switchTab('import')">Bulk Import</button>
-    <button class="tab" onclick="switchTab('records')">Records</button>
-    <button class="tab" onclick="switchTab('dashboard')">Dashboard</button>
-    <button class="tab" id="tabActivityBtn" onclick="switchTab('activity')">Activity Log</button>
+  <div class="tabs" id="tabsRow">
+    <button class="tab active" onclick="switchTab('add')" title="Add Student"><span class="tab-icon">➕</span><span class="tab-label">Add Student</span></button>
+    <button class="tab" onclick="switchTab('import')" title="Bulk Import"><span class="tab-icon">📥</span><span class="tab-label">Bulk Import</span></button>
+    <button class="tab" onclick="switchTab('records')" title="Records"><span class="tab-icon">📋</span><span class="tab-label">Records</span></button>
+    <button class="tab" onclick="switchTab('dashboard')" title="Dashboard"><span class="tab-icon">📊</span><span class="tab-label">Dashboard</span></button>
+    <button class="tab" id="tabActivityBtn" onclick="switchTab('activity')" title="Activity Log"><span class="tab-icon">🕘</span><span class="tab-label">Activity Log</span></button>
   </div>
+  <select class="tabs-mobile-select" id="tabsMobileSelect" onchange="switchTab(this.value)" aria-label="Switch section">
+    <option value="add">➕ Add Student</option>
+    <option value="import">📥 Bulk Import</option>
+    <option value="records">📋 Records</option>
+    <option value="dashboard">📊 Dashboard</option>
+    <option value="activity" id="tabActivityOption">🕘 Activity Log</option>
+  </select>
 
   <!-- TAB: ADD -->
   <div class="tab-panel active" id="tab-add">
@@ -1266,6 +1294,15 @@ const STUDENT_LOCKED_FIELD_IDS = ['m_id','m_campus','m_country','m_course','m_ty
 function applyRolePermissions() {
   document.body.classList.toggle('role-encoder', isEncoder());
   document.body.classList.toggle('role-student', isStudent());
+  const tabsSelect = document.getElementById('tabsMobileSelect');
+  if (tabsSelect) {
+    const addOpt = tabsSelect.querySelector('option[value="add"]');
+    const importOpt = tabsSelect.querySelector('option[value="import"]');
+    const activityOpt = document.getElementById('tabActivityOption');
+    if (addOpt) addOpt.style.display = isStudent() ? 'none' : '';
+    if (importOpt) importOpt.style.display = isStudent() ? 'none' : '';
+    if (activityOpt) activityOpt.style.display = (isEncoder() || isStudent()) ? 'none' : '';
+  }
   if (isStudent()) {
     // Nothing to add/import as a student — land straight on Records,
     // which (per the backend) will only ever contain their own row.
@@ -1801,6 +1838,8 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['add','import','records','dashboard','activity'][i] === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
+  const tabsSelect = document.getElementById('tabsMobileSelect');
+  if (tabsSelect) tabsSelect.value = name;
   if (name === 'records') loadRecords();
   if (name === 'dashboard') renderDashboard();
   if (name === 'activity') loadActivityLog();
