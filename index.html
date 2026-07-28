@@ -149,8 +149,6 @@
   tbody tr:last-child { border-bottom: none; }
   tbody td { padding: 13px 14px; vertical-align: middle; }
   .td-id { font-family: 'SF Mono', 'Roboto Mono', monospace; font-size: 12px; font-weight: 700; color: var(--accent-dk); white-space: nowrap; }
-  .assign-id-btn { font-family: inherit; font-size: 11px; font-weight: 700; color: var(--accent-dk); background: var(--accent-lt); border: 1px solid var(--accent); border-radius: 20px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
-  .assign-id-btn:hover { background: var(--accent); color: #fff; }
   .td-name { font-weight: 600; color: var(--ink); }
   .td-muted { color: var(--muted); font-size: 12px; }
   .badge { display: inline-block; padding: 2.5px 10px; border-radius: 20px; font-size: 10.5px; font-weight: 700; white-space: nowrap; letter-spacing: .1px; }
@@ -2788,16 +2786,10 @@ function renderTable(rows) {
     const rowClass  = (selectedRows.has(r.rowNo) ? 'row-selected ' : '') + (r.archived ? 'archived-row' : '');
     const lastEdit  = r.lastEditedBy ? `<span style="font-size:11px;">${r.lastEditedBy}${r.lastEditedAt ? '<br><span class="td-muted" style="font-size:10px;">'+r.lastEditedAt+'</span>' : ''}</span>` : '<span class="td-muted">—</span>';
     const rowClickHandler = `openProfile(${r.rowNo})`;
-    const canAssignId = !r.studentId && !r.dateGrad && isAdmin();
-    const idCell = r.studentId
-      ? r.studentId
-      : (canAssignId
-          ? `<button class="assign-id-btn" title="Auto-assign the next Student ID" onclick="event.stopPropagation();assignStudentId(${r.rowNo})">Assign ID</button>`
-          : '—');
     return `<tr onclick="${rowClickHandler}" style="background:${bgColor};" class="${rowClass}">
       <td onclick="event.stopPropagation();" data-label=""><input type="checkbox" class="row-checkbox" ${checked} onchange="toggleRowSelect(${r.rowNo}, this)"></td>
       <td class="td-muted" style="text-align:center;" data-label="">${start + i + 1}</td>
-      <td class="td-id" data-label="ID">${idCell}</td>
+      <td class="td-id" data-label="ID">${r.studentId || '—'}</td>
       <td class="td-name" data-label="Full Name">${r.fullName || '—'}${campBadge}</td>
       <td data-label="Campus">${campusBadge(r.campus)}</td>
       <td class="td-muted" data-label="Country">${r.country || '—'}</td>
@@ -2836,10 +2828,6 @@ function openRowMenu(evt, rowNo, archived) {
   closeRowMenus();
   if (alreadyOpenForThisRow) return; // acts as a toggle when clicking the same row's button twice
 
-  const rec = allRecords.find(r => r.rowNo === rowNo);
-  const assignIdItem = (rec && isAdmin() && !rec.studentId && !rec.dateGrad)
-    ? `<button onclick="event.stopPropagation();closeRowMenus();assignStudentId(${rowNo})">Assign ID</button>`
-    : '';
   const archiveItem = !isAdmin() ? '' : (archived
     ? `<button onclick="event.stopPropagation();closeRowMenus();archiveSingle(${rowNo}, false)">Restore</button>`
     : `<button class="danger-item" onclick="event.stopPropagation();closeRowMenus();archiveSingle(${rowNo}, true)">Archive</button>`);
@@ -2847,7 +2835,6 @@ function openRowMenu(evt, rowNo, archived) {
   menu.innerHTML = `
     <button onclick="event.stopPropagation();closeRowMenus();openProfile(${rowNo})">Profile</button>
     ${isAdmin() ? `<button onclick="event.stopPropagation();closeRowMenus();openEditByRow(${rowNo})">Edit</button>` : ''}
-    ${assignIdItem}
     ${archiveItem}
   `;
   menu.dataset.rowNo = String(rowNo);
@@ -4294,51 +4281,6 @@ async function bulkDownloadIdCards() {
 
   btn.disabled = false;
   btn.innerHTML = originalLabel;
-}
-
-// ── ONE-CLICK STUDENT ID ASSIGNMENT ─────────────────────────────────────
-// For records saved without a Student ID (blank field at registration).
-// Reuses the same "CU-<code><yy><seq>" scheme and running nextSeq counter
-// as the Add Student form, and refuses to touch anyone who has already
-// graduated (has a Graduation date) — those records should stay untouched.
-async function assignStudentId(rowNo) {
-  const r = allRecords.find(rec => rec.rowNo === rowNo);
-  if (!r) { toast('Could not find that record. Try refreshing.', 'error'); return; }
-  if (r.studentId) { toast('This record already has a Student ID.', 'error'); return; }
-  if (r.dateGrad)  { toast('Already graduated — Student IDs are no longer assigned to graduates.', 'error'); return; }
-
-  const newId = buildId(nextSeq, getCountryCode(r.country));
-  const payload = {
-    action:       'edit',
-    rowNo:        r.rowNo,
-    studentId:    newId,
-    fullName:     r.fullName || '',
-    campus:       r.campus || '',
-    country:      (r.country || '').toUpperCase(),
-    course:       r.course || '',
-    type:         r.type || '',
-    dateStarted:  toInputDate(r.dateStarted),
-    dateEnded:    toInputDate(r.dateEnded),
-    dateGrad:     toInputDate(r.dateGrad),
-    birthDay:     toInputDate(r.birthDay),
-    sex:          r.sex || '',
-    memo:         r.memo || '',
-    originSchool: r.originSchool || '',
-    isCamp:       !!r.isCamp,
-    school:       r.isCamp ? (r.school || '') : '',
-  };
-  try {
-    const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload(payload)) });
-    const data = await res.json();
-    if (data.status === 'error' && data.code === 401) { handleAuthError(); return; }
-    if (data.status === 'ok') {
-      nextSeq++; // so a second quick click before reload finishes doesn't reuse the same number
-      toast(`Assigned ${newId}!`, 'success');
-      loadRecords();
-    } else {
-      toast('Error: ' + (data.message || 'Unknown'), 'error');
-    }
-  } catch(e) { toast('Connection error.', 'error'); }
 }
 
 function openEditByRow(rowNo) {
