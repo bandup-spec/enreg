@@ -703,6 +703,28 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="certPreviewModal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <span class="modal-title">🎓 Certificate Preview</span>
+      <button class="modal-close" onclick="closeCertPreview()">✕</button>
+    </div>
+    <div class="modal-body" style="text-align:center;">
+      <div id="certPreviewStatus" style="padding:50px 10px;color:var(--muted);font-size:13px;font-weight:600;"></div>
+      <img id="certPreviewImg" style="display:none;max-width:100%;border:1px solid var(--border);border-radius:6px;box-shadow:var(--shadow-md);">
+      <div id="certPreviewNav" style="display:none;align-items:center;justify-content:center;gap:16px;margin-top:16px;">
+        <button class="btn btn-ghost btn-sm" onclick="certPreviewStep(-1)">‹ Prev</button>
+        <span id="certPreviewCounter" style="font-size:12.5px;color:var(--muted);font-weight:600;"></span>
+        <button class="btn btn-ghost btn-sm" onclick="certPreviewStep(1)">Next ›</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeCertPreview()">Cancel</button>
+      <button class="btn btn-success btn-sm" id="certDownloadBtn" onclick="downloadCertificatesPDF()" disabled>⬇ Download PDF</button>
+    </div>
+  </div>
+</div>
+
 <!-- ID CARD TEMPLATE MANAGER MODAL -->
 <div class="modal-overlay" id="templateModal">
   <div class="modal" style="max-width:480px;">
@@ -941,6 +963,7 @@
     <button class="tab" onclick="switchTab('records')" title="Records"><span class="tab-icon">📋</span><span class="tab-label">Records</span></button>
     <button class="tab" onclick="switchTab('dashboard')" title="Dashboard"><span class="tab-icon">📊</span><span class="tab-label">Dashboard</span></button>
     <button class="tab" id="tabActivityBtn" onclick="switchTab('activity')" title="Activity Log"><span class="tab-icon">🕘</span><span class="tab-label">Activity Log</span></button>
+    <button class="tab" id="tabCertificatesBtn" onclick="switchTab('certificates')" title="Certificates"><span class="tab-icon">🎓</span><span class="tab-label">Certificates</span></button>
   </div>
   <div class="tabs-burger-wrap" id="tabsBurgerWrap">
     <button class="tabs-burger-btn" id="tabsBurgerBtn" onclick="toggleTabsMenu(event)">
@@ -952,6 +975,7 @@
       <button class="tabs-burger-item" data-tab="records" onclick="closeTabsMenu();switchTab('records')">📋 Records</button>
       <button class="tabs-burger-item" data-tab="dashboard" onclick="closeTabsMenu();switchTab('dashboard')">📊 Dashboard</button>
       <button class="tabs-burger-item" data-tab="activity" id="tabActivityBurgerItem" onclick="closeTabsMenu();switchTab('activity')">🕘 Activity Log</button>
+      <button class="tabs-burger-item" data-tab="certificates" id="tabCertificatesBurgerItem" onclick="closeTabsMenu();switchTab('certificates')">🎓 Certificates</button>
     </div>
   </div>
 
@@ -1214,6 +1238,7 @@
         <span id="bulkCount">0 selected</span>
         <button class="btn btn-ghost btn-sm" onclick="bulkMarkGraduated()">Mark Graduated Today</button>
         <button class="btn btn-success btn-sm" id="bulkIdCardBtn" onclick="bulkDownloadIdCards()">⬇ ID Cards (Front, PNG ZIP)</button>
+        <button class="btn btn-success btn-sm" id="bulkCertBtn" onclick="openCertPreview()">🎓 Certificates</button>
         <button class="btn btn-ghost btn-sm" onclick="bulkArchive(true)">Archive Selected</button>
         <button class="btn btn-ghost btn-sm" onclick="bulkArchive(false)">Restore Selected</button>
         <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Clear</button>
@@ -1885,7 +1910,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['add','import','records','dashboard','activity'][i] === name));
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['add','import','records','dashboard','activity','certificates'][i] === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   const burgerItems = document.querySelectorAll('.tabs-burger-item');
@@ -4348,6 +4373,269 @@ async function bulkDownloadIdCards() {
     toast(`Downloaded ${records.length} ID card(s) as a ZIP of PNGs!`, 'success');
   } catch (e) {
     toast('Could not generate the ZIP file.', 'error');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = originalLabel;
+}
+
+// ── CERTIFICATE OF ACHIEVEMENT / APPRECIATION (A4 PDF, borderless) ──────────
+// Template images live in the GitHub repo (not this file) — fetched at
+// render time and cached per session. Text is overlaid on a <canvas> at
+// fractional positions measured from the reference designs, so it lines up
+// correctly no matter what pixel size the templates actually are.
+const CERT_TEMPLATE_URLS = {
+  student:  'https://raw.githubusercontent.com/bandup-spec/enreg/2685f718ee7a87070c5f07bb407517d1da18074b/cert/reg/certificate-template.png',
+  guardian: 'https://raw.githubusercontent.com/bandup-spec/enreg/28236863d7ec5111305d020f00353c9867b513d1/cert/reg/certificate-template-guardian.png',
+};
+const _certImgCache = {};
+function loadCertTemplateImage(kind) {
+  if (!_certImgCache[kind]) {
+    _certImgCache[kind] = new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload  = () => resolve(img);
+      img.onerror = () => reject(new Error('Could not load the ' + kind + ' certificate template.'));
+      img.src = CERT_TEMPLATE_URLS[kind];
+    });
+  }
+  return _certImgCache[kind];
+}
+
+// The name/body text uses two Google Fonts (gold cursive signature line +
+// serif body copy) to match the template's own design. Loaded once, lazily.
+let _certFontsReady = null;
+function ensureCertFontsLoaded() {
+  if (!_certFontsReady) {
+    if (!document.getElementById('certGoogleFontsLink')) {
+      const link = document.createElement('link');
+      link.id = 'certGoogleFontsLink';
+      link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=Alex+Brush&family=EB+Garamond:ital,wght@0,400;0,700;1,400&display=swap';
+      document.head.appendChild(link);
+    }
+    _certFontsReady = Promise.all([
+      document.fonts.load("100px 'Alex Brush'"),
+      document.fonts.load("60px 'EB Garamond'"),
+      document.fonts.load("bold 60px 'EB Garamond'"),
+    ]).catch(() => {}); // worst case: falls back to a system serif, still legible
+  }
+  return _certFontsReady;
+}
+
+function fmtCertDate(str) {
+  const iso = toInputDate(str);
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return isNaN(d) ? '' : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+// Reuses the pre-computed Weeks column if present, otherwise derives it —
+// same fallback the Records table and profile card already use — and makes
+// sure a bare number reads naturally in a sentence ("8" → "8 weeks").
+function certWeeksText(r) {
+  let w = (r.weeks !== '' && r.weeks != null) ? String(r.weeks).trim() : calcWeeks(r.dateStarted, r.dateEnded).trim();
+  if (/^\d+$/.test(w)) w = (w === '1') ? '1 week' : `${w} weeks`;
+  return w;
+}
+
+// Wraps `runs` (plain/bold text segments forming one sentence) to fit
+// maxWidth, then draws the resulting lines centered as a block around
+// centerYFrac * H — so a longer name/course doesn't overflow the card, it
+// just wraps to an extra line while staying visually centered.
+function drawCertParagraph(ctx, runs, centerX, centerYFrac, H, maxWidth, fontPx, lineHeightPx, color, fontFamily) {
+  const words = [];
+  runs.forEach(run => run.text.split(' ').forEach(w => { if (w) words.push({ text: w, bold: !!run.bold }); }));
+  const fontFor = bold => `${bold ? 'bold ' : ''}${fontPx}px '${fontFamily}', Georgia, serif`;
+  ctx.font = fontFor(false);
+  const spaceWidth = ctx.measureText(' ').width;
+
+  const lines = [];
+  let cur = [], curW = 0;
+  words.forEach(w => {
+    ctx.font = fontFor(w.bold);
+    const width = ctx.measureText(w.text).width;
+    if (cur.length && curW + spaceWidth + width > maxWidth) { lines.push({ words: cur, width: curW }); cur = []; curW = 0; }
+    curW += (cur.length ? spaceWidth : 0) + width;
+    cur.push({ ...w, width });
+  });
+  if (cur.length) lines.push({ words: cur, width: curW });
+
+  ctx.fillStyle = color;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  const totalH = lines.length * lineHeightPx;
+  let y = centerYFrac * H - totalH / 2 + fontPx * 0.78;
+  lines.forEach(line => {
+    let x = centerX - line.width / 2;
+    line.words.forEach(w => {
+      ctx.font = fontFor(w.bold);
+      ctx.fillText(w.text, x, y);
+      x += w.width + spaceWidth;
+    });
+    y += lineHeightPx;
+  });
+}
+
+// Renders one full certificate (student "Achievement" or guardian
+// "Appreciation") onto an offscreen canvas at the template's native
+// resolution, and returns that canvas.
+async function renderCertificateCanvas(kind, r) {
+  await ensureCertFontsLoaded();
+  const img = await loadCertTemplateImage(kind);
+  const canvas = document.createElement('canvas');
+  canvas.width  = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  const W = canvas.width, H = canvas.height;
+
+  // Recipient name — gold cursive signature line
+  ctx.font = `${Math.round(H * 0.058)}px 'Alex Brush', cursive`;
+  ctx.fillStyle = '#B8860B';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const nameCenterFrac = kind === 'student' ? 0.4268 : 0.4232;
+  const nameText = kind === 'student' ? (r.fullName || '') : (r.memo || '').trim();
+  ctx.fillText(nameText, W / 2, H * nameCenterFrac);
+
+  const bodyFontPx = Math.round(W * 0.0175);
+  const lineHeight = bodyFontPx * 1.6;
+  const maxWidth   = W * 0.76;
+  const bodyColor  = '#181818';
+
+  if (kind === 'student') {
+    const runs = [
+      { text: 'for successfully completing the ' },
+      { text: (r.course || '').trim(), bold: true },
+    ];
+    if ((r.type || '').trim()) runs.push({ text: ' ' + r.type.trim(), bold: true }); // Type is optional — only added when known
+    runs.push(
+      { text: ' course for ' },
+      { text: certWeeksText(r), bold: true },
+      { text: ' from ' },
+      { text: fmtCertDate(r.dateStarted), bold: true },
+      { text: ' to ' },
+      { text: fmtCertDate(r.dateEnded) + '.', bold: true },
+    );
+    drawCertParagraph(ctx, runs, W / 2, 0.5215, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
+    drawCertParagraph(ctx, [
+      { text: 'Given this ' },
+      { text: fmtCertDate(r.dateGrad), bold: true },
+      { text: ' at CWA-USPF ESL Center, Agustin Jereza Hall, USPF, Salinas Drive, Lahug, Cebu City.' },
+    ], W / 2, 0.6162, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
+  } else {
+    drawCertParagraph(ctx, [
+      { text: 'for your invaluable support and dedication in accompanying and watching over the students during their ' },
+      { text: certWeeksText(r), bold: true },
+      { text: ' ESL learning experience in Cebu.' },
+    ], W / 2, 0.5416, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
+    drawCertParagraph(ctx, [
+      { text: 'Given this ' },
+      { text: fmtCertDate(r.dateGrad), bold: true },
+      { text: ' at CWA-USPF ESL Center, Agustin Jereza Hall, USPF, Salinas Drive, Lahug, Cebu City.' },
+    ], W / 2, 0.6151, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
+  }
+
+  return canvas;
+}
+
+// ── Preview modal controller ────────────────────────────────────────────
+let certPreviewItems = []; // [{ canvas, label }]
+let certPreviewIndex = 0;
+
+async function openCertPreview() {
+  if (!selectedRows.size) { toast('Select at least one student first.', 'error'); return; }
+  const records = [...selectedRows].map(rowNo => allRecords.find(r => r.rowNo === rowNo)).filter(Boolean);
+  if (!records.length) { toast('Could not find the selected records. Try refreshing.', 'error'); return; }
+
+  certPreviewItems = [];
+  certPreviewIndex = 0;
+  document.getElementById('certPreviewImg').style.display = 'none';
+  document.getElementById('certPreviewNav').style.display = 'none';
+  document.getElementById('certDownloadBtn').disabled = true;
+  const statusEl = document.getElementById('certPreviewStatus');
+  statusEl.style.display = 'block';
+  statusEl.textContent = 'Loading certificate templates…';
+  document.getElementById('certPreviewModal').classList.add('open');
+
+  let skippedGuardians = 0;
+  try {
+    for (let i = 0; i < records.length; i++) {
+      const r = records[i];
+      statusEl.textContent = `Rendering ${i + 1} of ${records.length}…`;
+      const studentCanvas = await renderCertificateCanvas('student', r);
+      certPreviewItems.push({ canvas: studentCanvas, label: `${r.fullName || 'Student'} — Certificate of Achievement` });
+      if ((r.memo || '').trim()) {
+        const guardianCanvas = await renderCertificateCanvas('guardian', r);
+        certPreviewItems.push({ canvas: guardianCanvas, label: `${r.fullName || 'Student'} — Guardian Certificate of Appreciation` });
+      } else {
+        skippedGuardians++;
+      }
+    }
+  } catch (e) {
+    statusEl.textContent = 'Could not load the certificate templates. Check your connection and try again.';
+    return;
+  }
+
+  if (!certPreviewItems.length) { statusEl.textContent = 'Nothing to preview.'; return; }
+
+  statusEl.style.display = 'none';
+  document.getElementById('certPreviewNav').style.display = 'flex';
+  document.getElementById('certDownloadBtn').disabled = false;
+  showCertPreviewItem(0);
+
+  if (skippedGuardians) {
+    toast(`${skippedGuardians} student(s) skipped for the guardian certificate — no guardian name found in Memo.`, 'error');
+  }
+}
+
+function showCertPreviewItem(i) {
+  certPreviewIndex = (i + certPreviewItems.length) % certPreviewItems.length;
+  const item = certPreviewItems[certPreviewIndex];
+  const img = document.getElementById('certPreviewImg');
+  img.src = item.canvas.toDataURL('image/png');
+  img.style.display = 'inline-block';
+  document.getElementById('certPreviewCounter').textContent = `${certPreviewIndex + 1} of ${certPreviewItems.length} — ${item.label}`;
+}
+function certPreviewStep(delta) { showCertPreviewItem(certPreviewIndex + delta); }
+function closeCertPreview() {
+  document.getElementById('certPreviewModal').classList.remove('open');
+  certPreviewItems = [];
+}
+
+// Assembles every previewed canvas into ONE borderless A4 PDF — each
+// certificate is scaled to fully cover the page (like CSS object-fit:cover)
+// so there's no white margin, cropping a sliver off whichever side doesn't
+// match A4's exact aspect ratio rather than leaving letterboxing.
+async function downloadCertificatesPDF() {
+  if (!certPreviewItems.length) return;
+  const btn = document.getElementById('certDownloadBtn');
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Building PDF…`;
+
+  try {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+    const PAGE_W = 210, PAGE_H = 297, pageAspect = PAGE_W / PAGE_H;
+
+    certPreviewItems.forEach((item, i) => {
+      if (i > 0) pdf.addPage('a4', 'portrait');
+      const { canvas } = item;
+      const imgAspect = canvas.width / canvas.height;
+      let drawW, drawH, offX, offY;
+      if (imgAspect > pageAspect) { drawH = PAGE_H; drawW = PAGE_H * imgAspect; offX = (PAGE_W - drawW) / 2; offY = 0; }
+      else                        { drawW = PAGE_W; drawH = PAGE_W / imgAspect; offX = 0; offY = (PAGE_H - drawH) / 2; }
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', offX, offY, drawW, drawH, undefined, 'FAST');
+    });
+
+    const today = new Date().toISOString().slice(0, 10);
+    pdf.save(`certificates_${certPreviewItems.length}_${today}.pdf`);
+    toast(`Downloaded ${certPreviewItems.length} certificate page(s) as one PDF!`, 'success');
+    closeCertPreview();
+  } catch (e) {
+    toast('Could not generate the PDF.', 'error');
   }
 
   btn.disabled = false;
