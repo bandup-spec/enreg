@@ -984,7 +984,6 @@
     <button class="tab" onclick="switchTab('records')" title="Records"><span class="tab-icon">📋</span><span class="tab-label">Records</span></button>
     <button class="tab" onclick="switchTab('dashboard')" title="Dashboard"><span class="tab-icon">📊</span><span class="tab-label">Dashboard</span></button>
     <button class="tab" id="tabActivityBtn" onclick="switchTab('activity')" title="Activity Log"><span class="tab-icon">🕘</span><span class="tab-label">Activity Log</span></button>
-    <button class="tab" id="tabCertificatesBtn" onclick="switchTab('certificates')" title="Certificates"><span class="tab-icon">🎓</span><span class="tab-label">Certificates</span></button>
   </div>
   <div class="tabs-burger-wrap" id="tabsBurgerWrap">
     <button class="tabs-burger-btn" id="tabsBurgerBtn" onclick="toggleTabsMenu(event)">
@@ -996,7 +995,6 @@
       <button class="tabs-burger-item" data-tab="records" onclick="closeTabsMenu();switchTab('records')">📋 Records</button>
       <button class="tabs-burger-item" data-tab="dashboard" onclick="closeTabsMenu();switchTab('dashboard')">📊 Dashboard</button>
       <button class="tabs-burger-item" data-tab="activity" id="tabActivityBurgerItem" onclick="closeTabsMenu();switchTab('activity')">🕘 Activity Log</button>
-      <button class="tabs-burger-item" data-tab="certificates" id="tabCertificatesBurgerItem" onclick="closeTabsMenu();switchTab('certificates')">🎓 Certificates</button>
     </div>
   </div>
 
@@ -1932,7 +1930,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['add','import','records','dashboard','activity','certificates'][i] === name));
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['add','import','records','dashboard','activity'][i] === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   const burgerItems = document.querySelectorAll('.tabs-burger-item');
