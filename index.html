@@ -696,6 +696,27 @@
         <div id="colVisibilityList" style="display:flex;flex-direction:column;gap:6px;"></div>
         <span class="field-hint" style="display:block;margin-top:4px;">Hide columns you don't check often to keep the table focused.</span>
       </div>
+
+      <div class="field" style="margin-top:18px;">
+        <label style="display:block;margin-bottom:6px;">Certificate Wording</label>
+        <span class="field-hint" style="display:block;margin-bottom:10px;">Edit the two sentences printed on each certificate. Use «Course» «Type» «Weeks» «Date_Started» «Date_Ended» «Date_of_Graduation» anywhere you want that value auto-filled — an empty «Type» is skipped cleanly.</span>
+
+        <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Student — completion line</label>
+        <textarea id="certText_studentBody" rows="2" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('studentBody')"></textarea>
+        <button class="btn btn-ghost btn-sm" style="margin:4px 0 12px;padding:3px 10px;font-size:11px;" onclick="resetCertText('studentBody')">Reset to default</button>
+
+        <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Student — "Given this…" line</label>
+        <textarea id="certText_studentGiven" rows="2" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('studentGiven')"></textarea>
+        <button class="btn btn-ghost btn-sm" style="margin:4px 0 12px;padding:3px 10px;font-size:11px;" onclick="resetCertText('studentGiven')">Reset to default</button>
+
+        <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Guardian — appreciation line</label>
+        <textarea id="certText_guardianBody" rows="3" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('guardianBody')"></textarea>
+        <button class="btn btn-ghost btn-sm" style="margin:4px 0 12px;padding:3px 10px;font-size:11px;" onclick="resetCertText('guardianBody')">Reset to default</button>
+
+        <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Guardian — "Given this…" line</label>
+        <textarea id="certText_guardianGiven" rows="2" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('guardianGiven')"></textarea>
+        <button class="btn btn-ghost btn-sm" style="margin:4px 0 0;padding:3px 10px;font-size:11px;" onclick="resetCertText('guardianGiven')">Reset to default</button>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost btn-sm" onclick="closeSettingsModal()">Done</button>
@@ -1713,6 +1734,7 @@ function openSettingsModal() {
   document.getElementById('defaultTabSelect').value = getDefaultTab();
   populateDefaultCampusSelect();
   renderColumnVisibilityList();
+  populateCertTextFields();
   document.getElementById('settingsModal').classList.add('open');
 }
 function closeSettingsModal() {
@@ -4480,6 +4502,55 @@ function drawCertParagraph(ctx, runs, centerX, centerYFrac, H, maxWidth, fontPx,
 // Renders one full certificate (student "Achievement" or guardian
 // "Appreciation") onto an offscreen canvas at the template's native
 // resolution, and returns that canvas.
+// Editable certificate wording — the two dynamic sentences on each
+// certificate type are plain text with «Token» placeholders that get
+// swapped for the student's actual data at render time. Customized text is
+// kept in localStorage per browser/device (same pattern as the other
+// Settings options), separately from the defaults so "Reset" always works.
+const CERT_TEXT_DEFAULTS = {
+  studentBody:   'for successfully completing the «Course» «Type» course for «Weeks» from «Date_Started» to «Date_Ended».',
+  studentGiven:  'Given this «Date_of_Graduation» at CWA-USPF ESL Center, Agustin Jereza Hall, USPF, Salinas Drive, Lahug, Cebu City.',
+  guardianBody:  'for your invaluable support and dedication in accompanying and watching over the students during their «Weeks» ESL learning experience in Cebu.',
+  guardianGiven: 'Given this «Date_of_Graduation» at CWA-USPF ESL Center, Agustin Jereza Hall, USPF, Salinas Drive, Lahug, Cebu City.',
+};
+const CERT_TEXT_KEYS = Object.keys(CERT_TEXT_DEFAULTS);
+function getCertText(key) { return localStorage.getItem('enreg_certText_' + key) || CERT_TEXT_DEFAULTS[key]; }
+function saveCertTextFromInput(key) {
+  const el = document.getElementById('certText_' + key);
+  if (el) localStorage.setItem('enreg_certText_' + key, el.value);
+}
+function resetCertText(key) {
+  localStorage.removeItem('enreg_certText_' + key);
+  const el = document.getElementById('certText_' + key);
+  if (el) el.value = CERT_TEXT_DEFAULTS[key];
+}
+function populateCertTextFields() {
+  CERT_TEXT_KEYS.forEach(k => { const el = document.getElementById('certText_' + k); if (el) el.value = getCertText(k); });
+}
+
+// Turns a template string like "for the «Course» «Type» course" into
+// {text, bold} runs ready for drawCertParagraph — each «Token» is swapped
+// for its value (shown bold) or, if that value is empty (e.g. no Type on
+// record), removed entirely along with the extra whitespace it leaves
+// behind, so an optional field never leaves an awkward gap or blank pair
+// of quotes on the certificate.
+function parseCertTemplate(template, tokenValues) {
+  let out = template.replace(/«(\w+)»/g, (whole, key) => {
+    const val = tokenValues[key];
+    if (val === undefined) return whole; // unknown token — leave visible, signals a typo in Settings
+    return val ? '\u0001' + val + '\u0002' : '';
+  });
+  out = out.replace(/[ \t]{2,}/g, ' ').replace(/ +([.,])/g, '$1').trim();
+  const runs = [];
+  const re = /\u0001([^\u0002]*)\u0002|([^\u0001]+)/g;
+  let m;
+  while ((m = re.exec(out))) {
+    if (m[1] !== undefined) runs.push({ text: m[1], bold: true });
+    else if (m[2]) runs.push({ text: m[2] });
+  }
+  return runs;
+}
+
 async function renderCertificateCanvas(kind, r) {
   await ensureCertFontsLoaded();
   const img = await loadCertTemplateImage(kind);
@@ -4504,37 +4575,21 @@ async function renderCertificateCanvas(kind, r) {
   const maxWidth   = W * 0.76;
   const bodyColor  = '#181818';
 
+  const tokenValues = {
+    Course:             (r.course || '').trim(),
+    Type:               (r.type || '').trim(),
+    Weeks:              certWeeksText(r),
+    Date_Started:       fmtCertDate(r.dateStarted),
+    Date_Ended:         fmtCertDate(r.dateEnded),
+    Date_of_Graduation: fmtCertDate(r.dateGrad),
+  };
+
   if (kind === 'student') {
-    const runs = [
-      { text: 'for successfully completing the ' },
-      { text: (r.course || '').trim(), bold: true },
-    ];
-    if ((r.type || '').trim()) runs.push({ text: ' ' + r.type.trim(), bold: true }); // Type is optional — only added when known
-    runs.push(
-      { text: ' course for ' },
-      { text: certWeeksText(r), bold: true },
-      { text: ' from ' },
-      { text: fmtCertDate(r.dateStarted), bold: true },
-      { text: ' to ' },
-      { text: fmtCertDate(r.dateEnded) + '.', bold: true },
-    );
-    drawCertParagraph(ctx, runs, W / 2, 0.5215, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
-    drawCertParagraph(ctx, [
-      { text: 'Given this ' },
-      { text: fmtCertDate(r.dateGrad), bold: true },
-      { text: ' at CWA-USPF ESL Center, Agustin Jereza Hall, USPF, Salinas Drive, Lahug, Cebu City.' },
-    ], W / 2, 0.6162, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentBody'), tokenValues), W / 2, 0.5215, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentGiven'), tokenValues), W / 2, 0.6162, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
   } else {
-    drawCertParagraph(ctx, [
-      { text: 'for your invaluable support and dedication in accompanying and watching over the students during their ' },
-      { text: certWeeksText(r), bold: true },
-      { text: ' ESL learning experience in Cebu.' },
-    ], W / 2, 0.5416, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
-    drawCertParagraph(ctx, [
-      { text: 'Given this ' },
-      { text: fmtCertDate(r.dateGrad), bold: true },
-      { text: ' at CWA-USPF ESL Center, Agustin Jereza Hall, USPF, Salinas Drive, Lahug, Cebu City.' },
-    ], W / 2, 0.6151, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianBody'), tokenValues), W / 2, 0.5416, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianGiven'), tokenValues), W / 2, 0.6151, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
   }
 
   return canvas;
