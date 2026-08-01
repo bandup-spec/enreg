@@ -731,8 +731,32 @@
       <button class="modal-close" onclick="closeCertPreview()">✕</button>
     </div>
     <div class="modal-body" style="text-align:center;">
+      <div id="certDesignPanel" style="display:none;text-align:left;margin-bottom:16px;padding:14px 16px;background:var(--bg);border-radius:10px;border:1px solid var(--border);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <strong style="font-size:12.5px;">🎨 Fonts &amp; Size</strong>
+          <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;" onclick="resetCertDesign()">Reset</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;">
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;">Name font</label>
+            <select id="certDesignNameFont" onchange="onCertDesignChange()" style="width:100%;font-size:12.5px;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);color:var(--ink);"></select>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;">Body font</label>
+            <select id="certDesignBodyFont" onchange="onCertDesignChange()" style="width:100%;font-size:12.5px;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);color:var(--ink);"></select>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;">Name size <span id="certNameSizeVal"></span></label>
+            <input type="range" id="certDesignNameSize" min="0.7" max="1.4" step="0.05" oninput="onCertDesignChange()" style="width:100%;">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;">Body size <span id="certBodySizeVal"></span></label>
+            <input type="range" id="certDesignBodySize" min="0.7" max="1.4" step="0.05" oninput="onCertDesignChange()" style="width:100%;">
+          </div>
+        </div>
+      </div>
       <div id="certPreviewStatus" style="padding:50px 10px;color:var(--muted);font-size:13px;font-weight:600;"></div>
-      <img id="certPreviewImg" style="display:none;max-width:100%;border:1px solid var(--border);border-radius:6px;box-shadow:var(--shadow-md);">
+      <img id="certPreviewImg" style="display:none;max-width:100%;border:1px solid var(--border);border-radius:6px;box-shadow:var(--shadow-md);transition:opacity .15s;">
       <div id="certPreviewNav" style="display:none;align-items:center;justify-content:center;gap:16px;margin-top:16px;">
         <button class="btn btn-ghost btn-sm" onclick="certPreviewStep(-1)">‹ Prev</button>
         <span id="certPreviewCounter" style="font-size:12.5px;color:var(--muted);font-weight:600;"></span>
@@ -4422,25 +4446,82 @@ function loadCertTemplateImage(kind) {
   return _certImgCache[kind];
 }
 
-// The name/body text uses two Google Fonts (gold cursive signature line +
-// serif body copy) to match the template's own design. Loaded once, lazily.
-let _certFontsReady = null;
-function ensureCertFontsLoaded() {
-  if (!_certFontsReady) {
-    if (!document.getElementById('certGoogleFontsLink')) {
-      const link = document.createElement('link');
-      link.id = 'certGoogleFontsLink';
-      link.rel = 'stylesheet';
-      link.href = 'https://fonts.googleapis.com/css2?family=Alex+Brush&family=EB+Garamond:ital,wght@0,400;0,700;1,400&display=swap';
-      document.head.appendChild(link);
-    }
-    _certFontsReady = Promise.all([
-      document.fonts.load("100px 'Alex Brush'"),
-      document.fonts.load("60px 'EB Garamond'"),
-      document.fonts.load("bold 60px 'EB Garamond'"),
-    ]).catch(() => {}); // worst case: falls back to a system serif, still legible
+// A curated set of fonts the person can pick from in the Certificate
+// Designer panel — script fonts for the cursive recipient name, serif
+// fonts for the body copy. All loaded via one combined Google Fonts
+// stylesheet; each font's actual glyph data is only fetched by the browser
+// the first time it's actually used, so listing them all upfront is cheap.
+const CERT_NAME_FONTS = ['Alex Brush', 'Dancing Script', 'Great Vibes', 'Sacramento', 'Pacifico', 'Playball'];
+const CERT_BODY_FONTS = ['EB Garamond', 'Playfair Display', 'Cormorant Garamond', 'Lora', 'Merriweather', 'PT Serif'];
+const CERT_GOOGLE_FONTS_HREF = 'https://fonts.googleapis.com/css2?'
+  + 'family=Alex+Brush&family=Dancing+Script:wght@400;700&family=Great+Vibes&family=Sacramento'
+  + '&family=Pacifico&family=Playball'
+  + '&family=EB+Garamond:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;700'
+  + '&family=Cormorant+Garamond:wght@400;700&family=Lora:wght@400;700&family=Merriweather:wght@400;700'
+  + '&family=PT+Serif:wght@400;700&display=swap';
+
+// Loads the shared stylesheet once, then makes sure the two SPECIFIC fonts
+// currently selected are ready before we draw with them (fonts not yet
+// used anywhere on the page haven't actually been fetched by the browser
+// yet, even though the <link> is already there).
+function ensureCertFontsLoaded(nameFamily, bodyFamily) {
+  if (!document.getElementById('certGoogleFontsLink')) {
+    const link = document.createElement('link');
+    link.id = 'certGoogleFontsLink';
+    link.rel = 'stylesheet';
+    link.href = CERT_GOOGLE_FONTS_HREF;
+    document.head.appendChild(link);
   }
-  return _certFontsReady;
+  return Promise.all([
+    document.fonts.load(`100px '${nameFamily}'`),
+    document.fonts.load(`60px '${bodyFamily}'`),
+    document.fonts.load(`bold 60px '${bodyFamily}'`),
+  ]).catch(() => {}); // worst case: falls back to a system serif, still legible
+}
+
+// Font + size choices made in the Certificate Designer panel — stored
+// per-browser (same pattern as the rest of Settings) so they persist
+// between sessions without touching the backend.
+const CERT_DESIGN_DEFAULT = { nameFont: 'Alex Brush', bodyFont: 'EB Garamond', nameSizeMult: 1, bodySizeMult: 1 };
+function getCertDesign() {
+  try { return { ...CERT_DESIGN_DEFAULT, ...JSON.parse(localStorage.getItem('enreg_certDesign') || '{}') }; }
+  catch (e) { return { ...CERT_DESIGN_DEFAULT }; }
+}
+function saveCertDesign(design) { localStorage.setItem('enreg_certDesign', JSON.stringify(design)); }
+
+function populateCertDesignPanel() {
+  const design = getCertDesign();
+  const nameSel = document.getElementById('certDesignNameFont');
+  const bodySel = document.getElementById('certDesignBodyFont');
+  if (nameSel && !nameSel.options.length) CERT_NAME_FONTS.forEach(f => { const o = new Option(f, f); o.style.fontFamily = `'${f}', cursive`; nameSel.add(o); });
+  if (bodySel && !bodySel.options.length) CERT_BODY_FONTS.forEach(f => { const o = new Option(f, f); o.style.fontFamily = `'${f}', serif`; bodySel.add(o); });
+  if (nameSel) nameSel.value = design.nameFont;
+  if (bodySel) bodySel.value = design.bodyFont;
+  document.getElementById('certDesignNameSize').value = design.nameSizeMult;
+  document.getElementById('certDesignBodySize').value = design.bodySizeMult;
+  document.getElementById('certNameSizeVal').textContent = Math.round(design.nameSizeMult * 100) + '%';
+  document.getElementById('certBodySizeVal').textContent = Math.round(design.bodySizeMult * 100) + '%';
+}
+
+// Fired on every change in the Designer panel — saves the choice, then
+// re-renders every certificate currently in the preview list so the
+// change is visible immediately (Canva-style live preview).
+async function onCertDesignChange() {
+  const design = {
+    nameFont:     document.getElementById('certDesignNameFont').value,
+    bodyFont:     document.getElementById('certDesignBodyFont').value,
+    nameSizeMult: parseFloat(document.getElementById('certDesignNameSize').value),
+    bodySizeMult: parseFloat(document.getElementById('certDesignBodySize').value),
+  };
+  saveCertDesign(design);
+  document.getElementById('certNameSizeVal').textContent = Math.round(design.nameSizeMult * 100) + '%';
+  document.getElementById('certBodySizeVal').textContent = Math.round(design.bodySizeMult * 100) + '%';
+  await reRenderAllCertPreviews();
+}
+function resetCertDesign() {
+  localStorage.removeItem('enreg_certDesign');
+  populateCertDesignPanel();
+  reRenderAllCertPreviews();
 }
 
 function fmtCertDate(str) {
@@ -4550,7 +4631,8 @@ function parseCertTemplate(template, tokenValues) {
 }
 
 async function renderCertificateCanvas(kind, r) {
-  await ensureCertFontsLoaded();
+  const design = getCertDesign();
+  await ensureCertFontsLoaded(design.nameFont, design.bodyFont);
   const img = await loadCertTemplateImage(kind);
   const canvas = document.createElement('canvas');
   canvas.width  = img.naturalWidth;
@@ -4560,7 +4642,7 @@ async function renderCertificateCanvas(kind, r) {
   const W = canvas.width, H = canvas.height;
 
   // Recipient name — gold cursive signature line
-  ctx.font = `${Math.round(H * 0.058)}px 'Alex Brush', cursive`;
+  ctx.font = `${Math.round(H * 0.058 * design.nameSizeMult)}px '${design.nameFont}', cursive`;
   ctx.fillStyle = '#B8860B';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -4568,7 +4650,7 @@ async function renderCertificateCanvas(kind, r) {
   const nameText = kind === 'student' ? (r.fullName || '') : (r.memo || '').trim();
   ctx.fillText(nameText, W / 2, H * nameCenterFrac);
 
-  const bodyFontPx = Math.round(W * 0.0175);
+  const bodyFontPx = Math.round(W * 0.0175 * design.bodySizeMult);
   const lineHeight = bodyFontPx * 1.6;
   const maxWidth   = W * 0.76;
   const bodyColor  = '#181818';
@@ -4583,18 +4665,18 @@ async function renderCertificateCanvas(kind, r) {
   };
 
   if (kind === 'student') {
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentBody'), tokenValues), W / 2, 0.5215, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentGiven'), tokenValues), W / 2, 0.6162, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentBody'), tokenValues), W / 2, 0.5215, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentGiven'), tokenValues), W / 2, 0.6162, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
   } else {
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianBody'), tokenValues), W / 2, 0.5416, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianGiven'), tokenValues), W / 2, 0.6151, H, maxWidth, bodyFontPx, lineHeight, bodyColor, 'EB Garamond');
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianBody'), tokenValues), W / 2, 0.5416, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianGiven'), tokenValues), W / 2, 0.6151, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
   }
 
   return canvas;
 }
 
 // ── Preview modal controller ────────────────────────────────────────────
-let certPreviewItems = []; // [{ canvas, label }]
+let certPreviewItems = []; // [{ record, kind, canvas, label }]
 let certPreviewIndex = 0;
 
 async function openCertPreview() {
@@ -4606,11 +4688,13 @@ async function openCertPreview() {
   certPreviewIndex = 0;
   document.getElementById('certPreviewImg').style.display = 'none';
   document.getElementById('certPreviewNav').style.display = 'none';
+  document.getElementById('certDesignPanel').style.display = 'none';
   document.getElementById('certDownloadBtn').disabled = true;
   const statusEl = document.getElementById('certPreviewStatus');
   statusEl.style.display = 'block';
   statusEl.textContent = 'Loading certificate templates…';
   document.getElementById('certPreviewModal').classList.add('open');
+  populateCertDesignPanel();
 
   let skippedGuardians = 0;
   try {
@@ -4618,10 +4702,10 @@ async function openCertPreview() {
       const r = records[i];
       statusEl.textContent = `Rendering ${i + 1} of ${records.length}…`;
       const studentCanvas = await renderCertificateCanvas('student', r);
-      certPreviewItems.push({ canvas: studentCanvas, label: `${r.fullName || 'Student'} — Certificate of Achievement` });
+      certPreviewItems.push({ record: r, kind: 'student', canvas: studentCanvas, label: `${r.fullName || 'Student'} — Certificate of Achievement` });
       if ((r.memo || '').trim()) {
         const guardianCanvas = await renderCertificateCanvas('guardian', r);
-        certPreviewItems.push({ canvas: guardianCanvas, label: `${r.fullName || 'Student'} — Guardian Certificate of Appreciation` });
+        certPreviewItems.push({ record: r, kind: 'guardian', canvas: guardianCanvas, label: `${r.fullName || 'Student'} — Guardian Certificate of Appreciation` });
       } else {
         skippedGuardians++;
       }
@@ -4635,12 +4719,27 @@ async function openCertPreview() {
 
   statusEl.style.display = 'none';
   document.getElementById('certPreviewNav').style.display = 'flex';
+  document.getElementById('certDesignPanel').style.display = 'block';
   document.getElementById('certDownloadBtn').disabled = false;
   showCertPreviewItem(0);
 
   if (skippedGuardians) {
     toast(`${skippedGuardians} student(s) skipped for the guardian certificate — no guardian name found in Memo.`, 'error');
   }
+}
+
+// Re-draws every certificate currently loaded in the preview (using
+// whatever font/size is now selected in the Designer panel) and refreshes
+// the visible one — this is what makes the panel feel "live".
+async function reRenderAllCertPreviews() {
+  if (!certPreviewItems.length) return;
+  const img = document.getElementById('certPreviewImg');
+  img.style.opacity = '0.35';
+  for (const item of certPreviewItems) {
+    item.canvas = await renderCertificateCanvas(item.kind, item.record);
+  }
+  img.style.opacity = '1';
+  showCertPreviewItem(certPreviewIndex);
 }
 
 function showCertPreviewItem(i) {
