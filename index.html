@@ -754,6 +754,21 @@
             <input type="range" id="certDesignBodySize" min="0.7" max="1.4" step="0.05" oninput="onCertDesignChange()" style="width:100%;">
           </div>
         </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+          <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;">Border crop — Zoom <span id="certZoomVal"></span></label>
+          <input type="range" id="certDesignZoom" min="1" max="1.3" step="0.01" oninput="onCertDesignChange()" style="width:100%;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-top:10px;">
+            <div>
+              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;">Position — left ↔ right <span id="certCropXVal"></span></label>
+              <input type="range" id="certDesignCropX" min="0" max="1" step="0.01" oninput="onCertDesignChange()" style="width:100%;">
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;">Position — top ↔ bottom <span id="certCropYVal"></span></label>
+              <input type="range" id="certDesignCropY" min="0" max="1" step="0.01" oninput="onCertDesignChange()" style="width:100%;">
+            </div>
+          </div>
+          <span class="field-hint" style="display:block;margin-top:6px;">Zoom trims the template's white edge so the border reaches every corner. If one side still shows a gap, drag Position toward that side.</span>
+        </div>
       </div>
       <div id="certPreviewStatus" style="padding:50px 10px;color:var(--muted);font-size:13px;font-weight:600;"></div>
       <img id="certPreviewImg" style="display:none;max-width:100%;border:1px solid var(--border);border-radius:6px;box-shadow:var(--shadow-md);transition:opacity .15s;">
@@ -4521,7 +4536,7 @@ function ensureCertFontsLoaded(nameFamily, bodyFamily) {
 // Font + size choices made in the Certificate Designer panel — stored
 // per-browser (same pattern as the rest of Settings) so they persist
 // between sessions without touching the backend.
-const CERT_DESIGN_DEFAULT = { nameFont: 'Alex Brush', bodyFont: 'EB Garamond', nameSizeMult: 1, bodySizeMult: 1 };
+const CERT_DESIGN_DEFAULT = { nameFont: 'Alex Brush', bodyFont: 'EB Garamond', nameSizeMult: 1, bodySizeMult: 1, cropZoom: 1.075, cropX: 0.75, cropY: 0.5 };
 function getCertDesign() {
   try { return { ...CERT_DESIGN_DEFAULT, ...JSON.parse(localStorage.getItem('enreg_certDesign') || '{}') }; }
   catch (e) { return { ...CERT_DESIGN_DEFAULT }; }
@@ -4540,6 +4555,12 @@ function populateCertDesignPanel() {
   document.getElementById('certDesignBodySize').value = design.bodySizeMult;
   document.getElementById('certNameSizeVal').textContent = Math.round(design.nameSizeMult * 100) + '%';
   document.getElementById('certBodySizeVal').textContent = Math.round(design.bodySizeMult * 100) + '%';
+  document.getElementById('certDesignZoom').value = design.cropZoom;
+  document.getElementById('certDesignCropX').value = design.cropX;
+  document.getElementById('certDesignCropY').value = design.cropY;
+  document.getElementById('certZoomVal').textContent = Math.round((design.cropZoom - 1) * 100) + '%';
+  document.getElementById('certCropXVal').textContent = Math.round(design.cropX * 100) + '%';
+  document.getElementById('certCropYVal').textContent = Math.round(design.cropY * 100) + '%';
 }
 
 // Fired on every change in the Designer panel — saves the choice, then
@@ -4551,10 +4572,16 @@ async function onCertDesignChange() {
     bodyFont:     document.getElementById('certDesignBodyFont').value,
     nameSizeMult: parseFloat(document.getElementById('certDesignNameSize').value),
     bodySizeMult: parseFloat(document.getElementById('certDesignBodySize').value),
+    cropZoom:     parseFloat(document.getElementById('certDesignZoom').value),
+    cropX:        parseFloat(document.getElementById('certDesignCropX').value),
+    cropY:        parseFloat(document.getElementById('certDesignCropY').value),
   };
   saveCertDesign(design);
   document.getElementById('certNameSizeVal').textContent = Math.round(design.nameSizeMult * 100) + '%';
   document.getElementById('certBodySizeVal').textContent = Math.round(design.bodySizeMult * 100) + '%';
+  document.getElementById('certZoomVal').textContent = Math.round((design.cropZoom - 1) * 100) + '%';
+  document.getElementById('certCropXVal').textContent = Math.round(design.cropX * 100) + '%';
+  document.getElementById('certCropYVal').textContent = Math.round(design.cropY * 100) + '%';
   await reRenderAllCertPreviews();
 }
 function resetCertDesign() {
@@ -4690,16 +4717,14 @@ async function renderCertificateCanvas(kind, r) {
   ctx.drawImage(img, 0, 0);
   const W = canvas.width, H = canvas.height;
 
-  // Borderless-crop geometry, computed up front so text can be centered
-  // against the FINAL cropped frame rather than the original full canvas
-  // (see the crop step below for why the crop itself is shifted right).
-  const ZOOM = 1.075;
-  const cropW = W / ZOOM, cropH = H / ZOOM;
-  const maxShiftX = W - cropW;
-  const SHIFT_RIGHT_FRAC = 0.75; // 0 = hug left, 0.5 = centered, 1 = hug right
-  const cropX = maxShiftX * SHIFT_RIGHT_FRAC;
-  const cropY = (H - cropH) / 2;
-  const centerX = cropX + cropW / 2; // where "horizontally centered" text should actually be drawn
+  // Borderless-crop geometry — computed AFTER all drawing, applied as a
+  // final "viewfinder" step over the fully-composited image (art + our
+  // text together), so overlay text always stays perfectly aligned with
+  // the template's own baked-in static text regardless of crop settings.
+  // Zoom/position are user-adjustable in the Designer panel (cropX/cropY
+  // are 0–1 sliders: 0 = hug that edge, 0.5 = centered, 1 = hug the
+  // opposite edge) since the template's own margins aren't quite
+  // symmetric and needed manual, eyeballed correction.
 
   // Recipient name — gold cursive signature line
   ctx.font = `${Math.round(H * 0.058 * design.nameSizeMult)}px '${design.nameFont}', cursive`;
@@ -4708,7 +4733,7 @@ async function renderCertificateCanvas(kind, r) {
   ctx.textBaseline = 'middle';
   const nameCenterFrac = kind === 'student' ? 0.4268 : 0.4232;
   const nameText = (r.fullName || '').trim();
-  ctx.fillText(nameText, centerX, H * nameCenterFrac);
+  ctx.fillText(nameText, W / 2, H * nameCenterFrac);
 
   const bodyFontPx = Math.round(W * 0.0175 * design.bodySizeMult);
   const lineHeight = bodyFontPx * 1.6;
@@ -4725,16 +4750,21 @@ async function renderCertificateCanvas(kind, r) {
   };
 
   if (kind === 'student') {
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentBody'), tokenValues), centerX, 0.5215, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentGiven'), tokenValues), centerX, 0.6162, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentBody'), tokenValues), W / 2, 0.5215, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentGiven'), tokenValues), W / 2, 0.6162, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
   } else {
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianBody'), tokenValues), centerX, 0.5416, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianGiven'), tokenValues), centerX, 0.6151, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianBody'), tokenValues), W / 2, 0.5416, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianGiven'), tokenValues), W / 2, 0.6151, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
   }
 
   // Trim the template's outer "quiet zone" margin so the exported
-  // certificate is truly borderless (geometry computed up top, alongside
-  // centerX, so text placement and the crop always agree with each other).
+  // certificate is truly borderless — applied now, as a final crop over
+  // the fully-composited image (art + text together), using the
+  // zoom/position the person dialed in on the Designer panel.
+  const ZOOM = design.cropZoom;
+  const cropW = W / ZOOM, cropH = H / ZOOM;
+  const cropX = (W - cropW) * design.cropX;
+  const cropY = (H - cropH) * design.cropY;
   const cropped = document.createElement('canvas');
   cropped.width = Math.round(cropW);
   cropped.height = Math.round(cropH);
