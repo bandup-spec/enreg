@@ -4690,6 +4690,17 @@ async function renderCertificateCanvas(kind, r) {
   ctx.drawImage(img, 0, 0);
   const W = canvas.width, H = canvas.height;
 
+  // Borderless-crop geometry, computed up front so text can be centered
+  // against the FINAL cropped frame rather than the original full canvas
+  // (see the crop step below for why the crop itself is shifted right).
+  const ZOOM = 1.075;
+  const cropW = W / ZOOM, cropH = H / ZOOM;
+  const maxShiftX = W - cropW;
+  const SHIFT_RIGHT_FRAC = 0.75; // 0 = hug left, 0.5 = centered, 1 = hug right
+  const cropX = maxShiftX * SHIFT_RIGHT_FRAC;
+  const cropY = (H - cropH) / 2;
+  const centerX = cropX + cropW / 2; // where "horizontally centered" text should actually be drawn
+
   // Recipient name — gold cursive signature line
   ctx.font = `${Math.round(H * 0.058 * design.nameSizeMult)}px '${design.nameFont}', cursive`;
   ctx.fillStyle = '#B8860B';
@@ -4697,7 +4708,7 @@ async function renderCertificateCanvas(kind, r) {
   ctx.textBaseline = 'middle';
   const nameCenterFrac = kind === 'student' ? 0.4268 : 0.4232;
   const nameText = (r.fullName || '').trim();
-  ctx.fillText(nameText, W / 2, H * nameCenterFrac);
+  ctx.fillText(nameText, centerX, H * nameCenterFrac);
 
   const bodyFontPx = Math.round(W * 0.0175 * design.bodySizeMult);
   const lineHeight = bodyFontPx * 1.6;
@@ -4714,24 +4725,16 @@ async function renderCertificateCanvas(kind, r) {
   };
 
   if (kind === 'student') {
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentBody'), tokenValues), W / 2, 0.5215, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentGiven'), tokenValues), W / 2, 0.6162, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentBody'), tokenValues), centerX, 0.5215, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentGiven'), tokenValues), centerX, 0.6162, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
   } else {
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianBody'), tokenValues), W / 2, 0.5416, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianGiven'), tokenValues), W / 2, 0.6151, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianBody'), tokenValues), centerX, 0.5416, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianGiven'), tokenValues), centerX, 0.6151, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
   }
 
   // Trim the template's outer "quiet zone" margin so the exported
-  // certificate is truly borderless. A crop-to-content-bounding-box
-  // approach doesn't work here: the gold frame has decorative corner
-  // accents that already touch the literal edge in a couple of thin spots,
-  // so that method finds ~0 margin to trim. Instead we zoom in a fixed,
-  // conservative amount from the center — pushing the prominent border out
-  // to the edge on all four sides — verified safe against this template's
-  // actual margins (checked well clear of the border/ribbon artwork).
-  const ZOOM = 1.075; // ~3.5% trimmed off each side
-  const cropW = W / ZOOM, cropH = H / ZOOM;
-  const cropX = (W - cropW) / 2, cropY = (H - cropH) / 2;
+  // certificate is truly borderless (geometry computed up top, alongside
+  // centerX, so text placement and the crop always agree with each other).
   const cropped = document.createElement('canvas');
   cropped.width = Math.round(cropW);
   cropped.height = Math.round(cropH);
