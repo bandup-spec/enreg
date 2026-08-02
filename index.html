@@ -1281,7 +1281,6 @@
         <span id="bulkCount">0 selected</span>
         <button class="btn btn-ghost btn-sm" onclick="bulkMarkGraduated()">Mark Graduated Today</button>
         <button class="btn btn-success btn-sm" id="bulkIdCardBtn" onclick="bulkDownloadIdCards()">⬇ ID Cards (Front, PNG ZIP)</button>
-        <button class="btn btn-success btn-sm" id="bulkCertBtn" onclick="openCertPreview()">🎓 Certificates</button>
         <button class="btn btn-ghost btn-sm" onclick="bulkArchive(true)">Archive Selected</button>
         <button class="btn btn-ghost btn-sm" onclick="bulkArchive(false)">Restore Selected</button>
         <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Clear</button>
@@ -2019,6 +2018,21 @@ function simpleBarChart(title, counts) {
 // and back) since renderDashboard() rebuilds the whole #dashboardWrap,
 // including the <select> itself, on every call.
 let dashGradRange = 'thisWeek';
+// Selection state for the "Upcoming Graduations" widget's own checkboxes —
+// deliberately separate from the Records tab's `selectedRows`, since this
+// list only ever shows a handful of upcoming graduates at a time.
+let gradSelected = new Set();
+let certGenMode = 'student'; // 'student' | 'guardian' | 'both' — which certificate(s) to generate for the checked rows
+let lastUpcomingGradRowNos = []; // rowNos currently shown in the widget, refreshed each renderDashboard() call
+function toggleGradSelect(rowNo, checked) {
+  if (checked) gradSelected.add(rowNo); else gradSelected.delete(rowNo);
+  renderDashboard();
+}
+function toggleAllGradSelect(checked) {
+  lastUpcomingGradRowNos.forEach(rn => checked ? gradSelected.add(rn) : gradSelected.delete(rn));
+  renderDashboard();
+}
+function setCertGenMode(mode) { certGenMode = mode; renderDashboard(); }
 
 function renderDashboard() {
   const wrap = document.getElementById('dashboardWrap');
@@ -2075,13 +2089,19 @@ function renderDashboard() {
     .map(r => ({ r, d: parseGradDate(r.dateGrad) }))
     .filter(x => x.d && x.d >= rangeStart && x.d <= rangeEnd)
     .sort((a, b) => a.d - b.d);
+  lastUpcomingGradRowNos = upcomingGrads.map(x => x.r.rowNo);
+  // A selection can only ever contain rows that are actually shown right
+  // now — drop any stale rowNo left over from a previous, wider range.
+  gradSelected = new Set([...gradSelected].filter(rn => lastUpcomingGradRowNos.includes(rn)));
 
   const gradRows = upcomingGrads.map(({ r, d }) => {
     const typeCell = r.isCamp
       ? `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700;background:#064E3B;color:#D1FAE5;">CAMP</span>${r.school ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${escapeHtml(r.school)}</div>` : ''}`
       : `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700;background:${REGULAR_COLOR_CLIENT};color:#7C2D12;">REGULAR</span>`;
+    const checked = gradSelected.has(r.rowNo) ? 'checked' : '';
     return `
     <tr style="border-top:1px solid var(--border);">
+      <td style="padding:9px 12px;" onclick="event.stopPropagation();"><input type="checkbox" ${checked} onchange="toggleGradSelect(${r.rowNo}, this.checked)"></td>
       <td style="padding:9px 16px;font-weight:600;">${escapeHtml(r.fullName || '—')}</td>
       <td style="padding:9px 16px;">${campusBadge(r.campus)}</td>
       <td style="padding:9px 16px;" class="td-muted">${escapeHtml(r.course || '—')}</td>
@@ -2089,6 +2109,9 @@ function renderDashboard() {
       <td style="padding:9px 16px;font-weight:700;color:var(--accent-dk);white-space:nowrap;">${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
     </tr>`;
   }).join('');
+
+  const allShownChecked = upcomingGrads.length > 0 && upcomingGrads.every(({ r }) => gradSelected.has(r.rowNo));
+  const certModeBtn = (mode, label) => `<button class="btn btn-sm ${certGenMode === mode ? 'btn-primary' : 'btn-ghost'}" style="padding:5px 12px;font-size:12px;" onclick="setCertGenMode('${mode}')">${label}</button>`;
 
   const upcomingGradWidget = `
     <div class="card" style="margin-bottom:18px;">
@@ -2100,12 +2123,27 @@ function renderDashboard() {
           <option value="next30" ${dashGradRange === 'next30' ? 'selected' : ''}>Next 30 Days</option>
         </select>
       </div>
+      ${upcomingGrads.length ? `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg);">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;cursor:pointer;">
+            <input type="checkbox" ${allShownChecked ? 'checked' : ''} onchange="toggleAllGradSelect(this.checked)"> Select all shown
+          </label>
+          <span style="font-size:11.5px;color:var(--muted);">Generate as:</span>
+          <div style="display:flex;gap:4px;">
+            ${certModeBtn('student', 'Student')}
+            ${certModeBtn('guardian', 'Guardian')}
+            ${certModeBtn('both', 'Both')}
+          </div>
+        </div>
+        <button class="btn btn-success btn-sm" onclick="openCertPreviewFromDashboard()">🎓 Preview / Generate (${gradSelected.size})</button>
+      </div>` : ''}
       <div class="card-body" style="padding:0;">
         ${upcomingGrads.length ? `
           <div style="overflow-x:auto;">
             <table style="width:100%;border-collapse:collapse;font-size:13px;">
               <thead><tr style="text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">
-                <th style="padding:8px 16px;">Name</th><th style="padding:8px 16px;">Campus</th><th style="padding:8px 16px;">Course</th><th style="padding:8px 16px;">Type</th><th style="padding:8px 16px;">Graduation</th>
+                <th style="padding:8px 12px;"></th><th style="padding:8px 16px;">Name</th><th style="padding:8px 16px;">Campus</th><th style="padding:8px 16px;">Course</th><th style="padding:8px 16px;">Type</th><th style="padding:8px 16px;">Graduation</th>
               </tr></thead>
               <tbody>${gradRows}</tbody>
             </table>
@@ -4446,6 +4484,48 @@ function loadCertTemplateImage(kind) {
   return _certImgCache[kind];
 }
 
+// The source template PNGs include a white "quiet zone" margin outside the
+// gold border (fine for print bleed, but not what we want for an
+// edge-to-edge digital certificate). This scans the pristine template once
+// per kind and caches the tight bounding box of its actual design, which
+// renderCertificateCanvas then crops to before export.
+const _certBBoxCache = {};
+async function getCertContentBBox(kind) {
+  if (_certBBoxCache[kind]) return _certBBoxCache[kind];
+  const img = await loadCertTemplateImage(kind);
+  const tmp = document.createElement('canvas');
+  tmp.width = img.naturalWidth; tmp.height = img.naturalHeight;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(img, 0, 0);
+  let data;
+  try {
+    data = tctx.getImageData(0, 0, tmp.width, tmp.height).data;
+  } catch (e) {
+    // Cross-origin pixel read blocked for some reason — fall back to the
+    // full, uncropped template rather than breaking certificate generation.
+    return (_certBBoxCache[kind] = { x: 0, y: 0, w: tmp.width, h: tmp.height });
+  }
+  let minX = tmp.width, minY = tmp.height, maxX = 0, maxY = 0;
+  const step = 2; // sampling every 2px is plenty accurate and much faster on a 3000px+ image
+  for (let y = 0; y < tmp.height; y += step) {
+    const rowBase = y * tmp.width;
+    for (let x = 0; x < tmp.width; x += step) {
+      const idx = (rowBase + x) * 4;
+      const a = data[idx + 3];
+      if (a < 10) continue; // transparent — background
+      if (data[idx] > 248 && data[idx + 1] > 248 && data[idx + 2] > 248) continue; // near-white — background
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  const pad = Math.round(tmp.width * 0.003); // tiny safety margin so antialiased border edges aren't clipped
+  minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+  maxX = Math.min(tmp.width, maxX + pad); maxY = Math.min(tmp.height, maxY + pad);
+  return (_certBBoxCache[kind] = { x: minX, y: minY, w: maxX - minX, h: maxY - minY });
+}
+
 // A curated set of fonts the person can pick from in the Certificate
 // Designer panel — script fonts for the cursive recipient name, serif
 // fonts for the body copy. All loaded via one combined Google Fonts
@@ -4647,7 +4727,7 @@ async function renderCertificateCanvas(kind, r) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const nameCenterFrac = kind === 'student' ? 0.4268 : 0.4232;
-  const nameText = kind === 'student' ? (r.fullName || '') : (r.memo || '').trim();
+  const nameText = (r.fullName || '').trim();
   ctx.fillText(nameText, W / 2, H * nameCenterFrac);
 
   const bodyFontPx = Math.round(W * 0.0175 * design.bodySizeMult);
@@ -4672,17 +4752,29 @@ async function renderCertificateCanvas(kind, r) {
     drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianGiven'), tokenValues), W / 2, 0.6151, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
   }
 
-  return canvas;
+  // Trim the template's outer white margin so the exported certificate is
+  // truly borderless — the gold frame becomes the very edge of the image.
+  const bbox = await getCertContentBBox(kind);
+  const cropped = document.createElement('canvas');
+  cropped.width = bbox.w;
+  cropped.height = bbox.h;
+  cropped.getContext('2d').drawImage(canvas, bbox.x, bbox.y, bbox.w, bbox.h, 0, 0, bbox.w, bbox.h);
+  return cropped;
 }
 
 // ── Preview modal controller ────────────────────────────────────────────
 let certPreviewItems = []; // [{ record, kind, canvas, label }]
 let certPreviewIndex = 0;
 
-async function openCertPreview() {
-  if (!selectedRows.size) { toast('Select at least one student first.', 'error'); return; }
-  const records = [...selectedRows].map(rowNo => allRecords.find(r => r.rowNo === rowNo)).filter(Boolean);
-  if (!records.length) { toast('Could not find the selected records. Try refreshing.', 'error'); return; }
+function openCertPreviewFromDashboard() {
+  if (!gradSelected.size) { toast('Check at least one graduating student first.', 'error'); return; }
+  const records = [...gradSelected].map(rowNo => allRecords.find(r => r.rowNo === rowNo)).filter(Boolean);
+  const kinds = certGenMode === 'both' ? ['student', 'guardian'] : [certGenMode];
+  openCertPreview(records, kinds);
+}
+
+async function openCertPreview(records, kinds) {
+  if (!records || !records.length) { toast('Nothing selected to preview.', 'error'); return; }
 
   certPreviewItems = [];
   certPreviewIndex = 0;
@@ -4696,18 +4788,15 @@ async function openCertPreview() {
   document.getElementById('certPreviewModal').classList.add('open');
   populateCertDesignPanel();
 
-  let skippedGuardians = 0;
+  const CERT_LABEL = { student: 'Certificate of Achievement', guardian: 'Guardian Certificate of Appreciation' };
   try {
-    for (let i = 0; i < records.length; i++) {
-      const r = records[i];
-      statusEl.textContent = `Rendering ${i + 1} of ${records.length}…`;
-      const studentCanvas = await renderCertificateCanvas('student', r);
-      certPreviewItems.push({ record: r, kind: 'student', canvas: studentCanvas, label: `${r.fullName || 'Student'} — Certificate of Achievement` });
-      if ((r.memo || '').trim()) {
-        const guardianCanvas = await renderCertificateCanvas('guardian', r);
-        certPreviewItems.push({ record: r, kind: 'guardian', canvas: guardianCanvas, label: `${r.fullName || 'Student'} — Guardian Certificate of Appreciation` });
-      } else {
-        skippedGuardians++;
+    let done = 0;
+    const total = records.length * kinds.length;
+    for (const r of records) {
+      for (const kind of kinds) {
+        statusEl.textContent = `Rendering ${++done} of ${total}…`;
+        const canvas = await renderCertificateCanvas(kind, r);
+        certPreviewItems.push({ record: r, kind, canvas, label: `${r.fullName || 'Student'} — ${CERT_LABEL[kind]}` });
       }
     }
   } catch (e) {
@@ -4722,10 +4811,6 @@ async function openCertPreview() {
   document.getElementById('certDesignPanel').style.display = 'block';
   document.getElementById('certDownloadBtn').disabled = false;
   showCertPreviewItem(0);
-
-  if (skippedGuardians) {
-    toast(`${skippedGuardians} student(s) skipped for the guardian certificate — no guardian name found in Memo.`, 'error');
-  }
 }
 
 // Re-draws every certificate currently loaded in the preview (using
