@@ -4484,47 +4484,6 @@ function loadCertTemplateImage(kind) {
   return _certImgCache[kind];
 }
 
-// The source template PNGs include a white "quiet zone" margin outside the
-// gold border (fine for print bleed, but not what we want for an
-// edge-to-edge digital certificate). This scans the pristine template once
-// per kind and caches the tight bounding box of its actual design, which
-// renderCertificateCanvas then crops to before export.
-const _certBBoxCache = {};
-async function getCertContentBBox(kind) {
-  if (_certBBoxCache[kind]) return _certBBoxCache[kind];
-  const img = await loadCertTemplateImage(kind);
-  const tmp = document.createElement('canvas');
-  tmp.width = img.naturalWidth; tmp.height = img.naturalHeight;
-  const tctx = tmp.getContext('2d');
-  tctx.drawImage(img, 0, 0);
-  let data;
-  try {
-    data = tctx.getImageData(0, 0, tmp.width, tmp.height).data;
-  } catch (e) {
-    // Cross-origin pixel read blocked for some reason — fall back to the
-    // full, uncropped template rather than breaking certificate generation.
-    return (_certBBoxCache[kind] = { x: 0, y: 0, w: tmp.width, h: tmp.height });
-  }
-  let minX = tmp.width, minY = tmp.height, maxX = 0, maxY = 0;
-  const step = 2; // sampling every 2px is plenty accurate and much faster on a 3000px+ image
-  for (let y = 0; y < tmp.height; y += step) {
-    const rowBase = y * tmp.width;
-    for (let x = 0; x < tmp.width; x += step) {
-      const idx = (rowBase + x) * 4;
-      const a = data[idx + 3];
-      if (a < 10) continue; // transparent — background
-      if (data[idx] > 248 && data[idx + 1] > 248 && data[idx + 2] > 248) continue; // near-white — background
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-  }
-  const pad = Math.round(tmp.width * 0.003); // tiny safety margin so antialiased border edges aren't clipped
-  minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
-  maxX = Math.min(tmp.width, maxX + pad); maxY = Math.min(tmp.height, maxY + pad);
-  return (_certBBoxCache[kind] = { x: minX, y: minY, w: maxX - minX, h: maxY - minY });
-}
 
 // A curated set of fonts the person can pick from in the Certificate
 // Designer panel — script fonts for the cursive recipient name, serif
@@ -4614,6 +4573,16 @@ function fmtCertDate(str) {
 // Reuses the pre-computed Weeks column if present, otherwise derives it —
 // same fallback the Records table and profile card already use — and makes
 // sure a bare number reads naturally in a sentence ("8" → "8 weeks").
+// Records sometimes have a literal "N/A" (or similar placeholder) typed
+// into the Type column instead of being left blank. Treated the same as
+// empty so it's cleanly skipped from the certificate wording, same as a
+// truly blank Type — "N/A" should never show up printed on a certificate.
+const CERT_NA_VALUES = new Set(['n/a', 'na', 'n.a.', 'none', 'nil', '-', '--', 'null', 'tba', 'tbd']);
+function isMeaningfulCertValue(v) {
+  const t = (v || '').toString().trim();
+  return !!t && !CERT_NA_VALUES.has(t.toLowerCase());
+}
+
 function certWeeksText(r) {
   let w = (r.weeks !== '' && r.weeks != null) ? String(r.weeks).trim() : calcWeeks(r.dateStarted, r.dateEnded).trim();
   if (/^\d+$/.test(w)) w = (w === '1') ? '1 week' : `${w} weeks`;
@@ -4737,7 +4706,7 @@ async function renderCertificateCanvas(kind, r) {
 
   const tokenValues = {
     Course:             (r.course || '').trim(),
-    Type:               (r.type || '').trim(),
+    Type:               isMeaningfulCertValue(r.type) ? r.type.trim() : '',
     Weeks:              certWeeksText(r),
     Date_Started:       fmtCertDate(r.dateStarted),
     Date_Ended:         fmtCertDate(r.dateEnded),
@@ -4752,13 +4721,21 @@ async function renderCertificateCanvas(kind, r) {
     drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianGiven'), tokenValues), W / 2, 0.6151, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
   }
 
-  // Trim the template's outer white margin so the exported certificate is
-  // truly borderless — the gold frame becomes the very edge of the image.
-  const bbox = await getCertContentBBox(kind);
+  // Trim the template's outer "quiet zone" margin so the exported
+  // certificate is truly borderless. A crop-to-content-bounding-box
+  // approach doesn't work here: the gold frame has decorative corner
+  // accents that already touch the literal edge in a couple of thin spots,
+  // so that method finds ~0 margin to trim. Instead we zoom in a fixed,
+  // conservative amount from the center — pushing the prominent border out
+  // to the edge on all four sides — verified safe against this template's
+  // actual margins (checked well clear of the border/ribbon artwork).
+  const ZOOM = 1.075; // ~3.5% trimmed off each side
+  const cropW = W / ZOOM, cropH = H / ZOOM;
+  const cropX = (W - cropW) / 2, cropY = (H - cropH) / 2;
   const cropped = document.createElement('canvas');
-  cropped.width = bbox.w;
-  cropped.height = bbox.h;
-  cropped.getContext('2d').drawImage(canvas, bbox.x, bbox.y, bbox.w, bbox.h, 0, 0, bbox.w, bbox.h);
+  cropped.width = Math.round(cropW);
+  cropped.height = Math.round(cropH);
+  cropped.getContext('2d').drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropped.width, cropped.height);
   return cropped;
 }
 
