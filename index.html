@@ -4584,7 +4584,8 @@ function populateCertDesignPanel() {
 // Fired on every change in the Designer panel — saves the choice, then
 // re-renders every certificate currently in the preview list so the
 // change is visible immediately (Canva-style live preview).
-async function onCertDesignChange() {
+let _certDesignRerenderTimer = null;
+function onCertDesignChange() {
   const design = {
     nameFont:     document.getElementById('certDesignNameFont').value,
     bodyFont:     document.getElementById('certDesignBodyFont').value,
@@ -4597,6 +4598,9 @@ async function onCertDesignChange() {
     bodyOffsetY:  parseFloat(document.getElementById('certDesignBodyOffsetY').value),
   };
   saveCertDesign(design);
+  // Labels update immediately (cheap) — the actual re-render of every
+  // preview canvas is debounced so dragging a slider stays smooth instead
+  // of re-rendering full-resolution certificates on every pixel of drag.
   document.getElementById('certNameSizeVal').textContent = Math.round(design.nameSizeMult * 100) + '%';
   document.getElementById('certBodySizeVal').textContent = Math.round(design.bodySizeMult * 100) + '%';
   document.getElementById('certZoomVal').textContent = Math.round((design.cropZoom - 1) * 100) + '%';
@@ -4604,7 +4608,8 @@ async function onCertDesignChange() {
   document.getElementById('certCropYVal').textContent = Math.round(design.cropY * 100) + '%';
   document.getElementById('certBodyOffsetXVal').textContent = Math.round(design.bodyOffsetX * 100) + '%';
   document.getElementById('certBodyOffsetYVal').textContent = Math.round(design.bodyOffsetY * 100) + '%';
-  await reRenderAllCertPreviews();
+  clearTimeout(_certDesignRerenderTimer);
+  _certDesignRerenderTimer = setTimeout(reRenderAllCertPreviews, 350);
 }
 function resetCertDesign() {
   localStorage.removeItem('enreg_certDesign');
@@ -4847,23 +4852,32 @@ async function openCertPreview(records, kinds) {
   showCertPreviewItem(0);
 }
 
-// Re-draws every certificate currently loaded in the preview (using
-// whatever font/size is now selected in the Designer panel) and refreshes
-// the visible one — this is what makes the panel feel "live".
+// Re-draws ONLY the certificate currently on screen (fast — one canvas,
+// not the whole batch) so the Designer panel feels live even with many
+// students selected. The rest are marked stale and get refreshed lazily,
+// either when navigated to (showCertPreviewItem) or right before the
+// final PDF is built (downloadCertificatesPDF), so nothing is ever
+// exported using an outdated font/size/crop.
+let certDesignDirty = false;
 async function reRenderAllCertPreviews() {
   if (!certPreviewItems.length) return;
   const img = document.getElementById('certPreviewImg');
   img.style.opacity = '0.35';
-  for (const item of certPreviewItems) {
-    item.canvas = await renderCertificateCanvas(item.kind, item.record);
-  }
+  const current = certPreviewItems[certPreviewIndex];
+  current.canvas = await renderCertificateCanvas(current.kind, current.record);
+  certPreviewItems.forEach((item, i) => { if (i !== certPreviewIndex) item.stale = true; });
+  certDesignDirty = true;
   img.style.opacity = '1';
   showCertPreviewItem(certPreviewIndex);
 }
 
-function showCertPreviewItem(i) {
+async function showCertPreviewItem(i) {
   certPreviewIndex = (i + certPreviewItems.length) % certPreviewItems.length;
   const item = certPreviewItems[certPreviewIndex];
+  if (item.stale) {
+    item.canvas = await renderCertificateCanvas(item.kind, item.record);
+    item.stale = false;
+  }
   const img = document.getElementById('certPreviewImg');
   img.src = item.canvas.toDataURL('image/png');
   img.style.display = 'inline-block';
@@ -4887,6 +4901,16 @@ async function downloadCertificatesPDF() {
   btn.innerHTML = `<span class="spinner"></span> Building PDF…`;
 
   try {
+    // Catch up any certificates that were only lazily marked stale while
+    // the person was fine-tuning the design on a different one, so the
+    // exported PDF always matches the final settings for every page.
+    if (certDesignDirty) {
+      for (const item of certPreviewItems) {
+        if (item.stale) { item.canvas = await renderCertificateCanvas(item.kind, item.record); item.stale = false; }
+      }
+      certDesignDirty = false;
+    }
+
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
     const PAGE_W = 210, PAGE_H = 297, pageAspect = PAGE_W / PAGE_H;
