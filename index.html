@@ -769,6 +769,20 @@
           </div>
           <span class="field-hint" style="display:block;margin-top:6px;">Zoom trims the template's white edge so the border reaches every corner. If one side still shows a gap, drag Position toward that side.</span>
         </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+          <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;">Body text position (independent of the border crop above)</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;">
+            <div>
+              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;">Left ↔ Right <span id="certBodyOffsetXVal"></span></label>
+              <input type="range" id="certDesignBodyOffsetX" min="-0.08" max="0.08" step="0.005" oninput="onCertDesignChange()" style="width:100%;">
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;">Up ↔ Down <span id="certBodyOffsetYVal"></span></label>
+              <input type="range" id="certDesignBodyOffsetY" min="-0.08" max="0.08" step="0.005" oninput="onCertDesignChange()" style="width:100%;">
+            </div>
+          </div>
+          <span class="field-hint" style="display:block;margin-top:6px;">Nudges only the sentences below the name (Course/Weeks/Dates lines) — the name itself and the border don't move.</span>
+        </div>
       </div>
       <div id="certPreviewStatus" style="padding:50px 10px;color:var(--muted);font-size:13px;font-weight:600;"></div>
       <img id="certPreviewImg" style="display:none;max-width:100%;border:1px solid var(--border);border-radius:6px;box-shadow:var(--shadow-md);transition:opacity .15s;">
@@ -4536,7 +4550,7 @@ function ensureCertFontsLoaded(nameFamily, bodyFamily) {
 // Font + size choices made in the Certificate Designer panel — stored
 // per-browser (same pattern as the rest of Settings) so they persist
 // between sessions without touching the backend.
-const CERT_DESIGN_DEFAULT = { nameFont: 'Alex Brush', bodyFont: 'EB Garamond', nameSizeMult: 1, bodySizeMult: 1, cropZoom: 1.075, cropX: 0.75, cropY: 0.5 };
+const CERT_DESIGN_DEFAULT = { nameFont: 'Alex Brush', bodyFont: 'EB Garamond', nameSizeMult: 1, bodySizeMult: 1, cropZoom: 1.075, cropX: 0.75, cropY: 0.5, bodyOffsetX: 0, bodyOffsetY: 0 };
 function getCertDesign() {
   try { return { ...CERT_DESIGN_DEFAULT, ...JSON.parse(localStorage.getItem('enreg_certDesign') || '{}') }; }
   catch (e) { return { ...CERT_DESIGN_DEFAULT }; }
@@ -4561,6 +4575,10 @@ function populateCertDesignPanel() {
   document.getElementById('certZoomVal').textContent = Math.round((design.cropZoom - 1) * 100) + '%';
   document.getElementById('certCropXVal').textContent = Math.round(design.cropX * 100) + '%';
   document.getElementById('certCropYVal').textContent = Math.round(design.cropY * 100) + '%';
+  document.getElementById('certDesignBodyOffsetX').value = design.bodyOffsetX;
+  document.getElementById('certDesignBodyOffsetY').value = design.bodyOffsetY;
+  document.getElementById('certBodyOffsetXVal').textContent = Math.round(design.bodyOffsetX * 100) + '%';
+  document.getElementById('certBodyOffsetYVal').textContent = Math.round(design.bodyOffsetY * 100) + '%';
 }
 
 // Fired on every change in the Designer panel — saves the choice, then
@@ -4575,6 +4593,8 @@ async function onCertDesignChange() {
     cropZoom:     parseFloat(document.getElementById('certDesignZoom').value),
     cropX:        parseFloat(document.getElementById('certDesignCropX').value),
     cropY:        parseFloat(document.getElementById('certDesignCropY').value),
+    bodyOffsetX:  parseFloat(document.getElementById('certDesignBodyOffsetX').value),
+    bodyOffsetY:  parseFloat(document.getElementById('certDesignBodyOffsetY').value),
   };
   saveCertDesign(design);
   document.getElementById('certNameSizeVal').textContent = Math.round(design.nameSizeMult * 100) + '%';
@@ -4582,6 +4602,8 @@ async function onCertDesignChange() {
   document.getElementById('certZoomVal').textContent = Math.round((design.cropZoom - 1) * 100) + '%';
   document.getElementById('certCropXVal').textContent = Math.round(design.cropX * 100) + '%';
   document.getElementById('certCropYVal').textContent = Math.round(design.cropY * 100) + '%';
+  document.getElementById('certBodyOffsetXVal').textContent = Math.round(design.bodyOffsetX * 100) + '%';
+  document.getElementById('certBodyOffsetYVal').textContent = Math.round(design.bodyOffsetY * 100) + '%';
   await reRenderAllCertPreviews();
 }
 function resetCertDesign() {
@@ -4749,12 +4771,14 @@ async function renderCertificateCanvas(kind, r) {
     Date_of_Graduation: fmtCertDate(r.dateGrad),
   };
 
+  const bodyCenterX = W / 2 + design.bodyOffsetX * W;
+
   if (kind === 'student') {
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentBody'), tokenValues), W / 2, 0.5215, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentGiven'), tokenValues), W / 2, 0.6162, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentBody'), tokenValues), bodyCenterX, 0.5215 + design.bodyOffsetY, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('studentGiven'), tokenValues), bodyCenterX, 0.6162 + design.bodyOffsetY, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
   } else {
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianBody'), tokenValues), W / 2, 0.5416, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
-    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianGiven'), tokenValues), W / 2, 0.6151, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianBody'), tokenValues), bodyCenterX, 0.5416 + design.bodyOffsetY, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
+    drawCertParagraph(ctx, parseCertTemplate(getCertText('guardianGiven'), tokenValues), bodyCenterX, 0.6151 + design.bodyOffsetY, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont);
   }
 
   // Trim the template's outer "quiet zone" margin so the exported
