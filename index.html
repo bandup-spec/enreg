@@ -699,7 +699,7 @@
 
       <div class="field" style="margin-top:18px;">
         <label style="display:block;margin-bottom:6px;">Certificate Wording</label>
-        <span class="field-hint" style="display:block;margin-bottom:10px;">Edit the two sentences printed on each certificate. Use «Course» «Type» «Weeks» «Date_Started» «Date_Ended» «Date_of_Graduation» anywhere you want that value auto-filled — an empty «Type» is skipped cleanly.</span>
+        <span class="field-hint" style="display:block;margin-bottom:10px;">Edit the two sentences printed on each certificate. Use «Course» «Type» «Weeks» «Date_Started» «Date_Ended» «Date_of_Graduation» «Venue» anywhere you want that value auto-filled — an empty «Type» is skipped cleanly. «Venue» auto-fills the correct campus address (Mabolo, USPF, or IAU) based on each student's Campus field.</span>
 
         <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Student — completion line</label>
         <textarea id="certText_studentBody" rows="2" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('studentBody')"></textarea>
@@ -3856,6 +3856,20 @@ function cardColorFor(r) {
 const CARD_TEMPLATE_KEY = 'enrollmentRegistry_cardTemplates';
 const CAMPUS_LIST = ['CWA-Mabolo', 'CWA-USPF', 'CWA-IAU'];
 
+// Certificate venue address per campus — the "Given this [date] at ___"
+// line on every certificate must reflect where the student actually
+// graduated, not a single hardcoded address. CWA-Mabolo is the main
+// campus and doubles as the fallback for records with no (or an
+// unrecognized) campus value.
+const CAMPUS_ADDRESS = {
+  'CWA-Mabolo': 'CWA Mabolo, Limbong Street, Mabolo, Cebu City',
+  'CWA-USPF':   'CWA-USPF ESL Center, USPF, Salinas Drive, Lahug, Cebu City',
+  'CWA-IAU':    'Indiana Aerospace University, IAU Town Center, Kagudoy Road, Lapu-Lapu City',
+};
+function getCertVenueAddress(r) {
+  return CAMPUS_ADDRESS[r.campus] || CAMPUS_ADDRESS['CWA-Mabolo'];
+}
+
 // ── BUILT-IN PRESET TEMPLATES ─────────────────────────────────────────────
 // Ready-made front designs (same 685×1039 canvas as the default built-in
 // triangle design) that can be applied to any campus/camp-school key with one
@@ -4691,9 +4705,9 @@ function drawCertParagraph(ctx, runs, centerX, centerYFrac, H, maxWidth, fontPx,
 // Settings options), separately from the defaults so "Reset" always works.
 const CERT_TEXT_DEFAULTS = {
   studentBody:   'for successfully completing the «Course» «Type» course for «Weeks» from «Date_Started» to «Date_Ended».',
-  studentGiven:  'Given this «Date_of_Graduation» at CWA-USPF ESL Center, Agustin Jereza Hall, USPF, Salinas Drive, Lahug, Cebu City.',
+  studentGiven:  'Given this «Date_of_Graduation» at «Venue».',
   guardianBody:  'for your invaluable support and dedication in accompanying and watching over the students during their «Weeks» ESL learning experience in Cebu.',
-  guardianGiven: 'Given this «Date_of_Graduation» at CWA-USPF ESL Center, Agustin Jereza Hall, USPF, Salinas Drive, Lahug, Cebu City.',
+  guardianGiven: 'Given this «Date_of_Graduation» at «Venue».',
 };
 const CERT_TEXT_KEYS = Object.keys(CERT_TEXT_DEFAULTS);
 function getCertText(key) { return localStorage.getItem('enreg_certText_' + key) || CERT_TEXT_DEFAULTS[key]; }
@@ -4774,6 +4788,7 @@ async function renderCertificateCanvas(kind, r) {
     Date_Started:       fmtCertDate(r.dateStarted),
     Date_Ended:         fmtCertDate(r.dateEnded),
     Date_of_Graduation: fmtCertDate(r.dateGrad),
+    Venue:              getCertVenueAddress(r),
   };
 
   const bodyCenterX = W / 2 + design.bodyOffsetX * W;
