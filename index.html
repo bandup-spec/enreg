@@ -259,6 +259,9 @@
   .login-alt { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted); line-height: 1.5; }
   .login-alt a { color: var(--accent-dk); font-weight: 700; text-decoration: none; }
   .login-alt a:hover { text-decoration: underline; }
+  .login-staylogin { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 4px 0 16px; font-size: 12.5px; color: var(--text-2); user-select: none; }
+  .login-staylogin input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+  .login-staylogin label { cursor: pointer; }
   .login-divider { display: flex; align-items: center; gap: 12px; margin: 22px 0 18px; font-size: 12px; color: var(--muted); }
   .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
   .student-login-form { text-align: left; }
@@ -470,6 +473,10 @@
         <div class="login-title">Enrollment Registry</div>
         <div class="login-sub">Sign in with your authorized school Google account to continue.</div>
         <div class="login-btn-wrap" id="gsiButtonWrap"></div>
+        <div class="login-staylogin">
+          <input type="checkbox" id="staySignedInChk" checked onchange="changeStaySignedIn(this.checked)">
+          <label for="staySignedInChk">Stay signed in on this device</label>
+        </div>
         <div class="login-msg" id="loginMsg"></div>
 
         <div class="login-divider"><span>or sign in as a student</span></div>
@@ -1460,6 +1467,22 @@ function withAuth(url) {
   const sep = url.includes('?') ? '&' : '?';
   return url + sep + 'idToken=' + encodeURIComponent(currentIdToken || '');
 }
+// "Stay signed in" preference — persisted so returning visits (even after the
+// browser is fully closed) can skip the login screen when enabled.
+function getStaySignedIn() {
+  const v = localStorage.getItem('enreg_staySignedIn');
+  return v === null ? true : v === '1';
+}
+function setStaySignedIn(val) {
+  localStorage.setItem('enreg_staySignedIn', val ? '1' : '0');
+}
+function changeStaySignedIn(checked) {
+  setStaySignedIn(checked);
+  try {
+    if (checked) { google.accounts.id.prompt(); }
+    else { google.accounts.id.disableAutoSelect(); }
+  } catch(e) {}
+}
 // Adds idToken into a POST payload object
 function withAuthPayload(payload) {
   return Object.assign({}, payload, { idToken: currentIdToken });
@@ -1528,6 +1551,9 @@ async function handleCredentialResponse(response) {
   document.getElementById('loginOverlay').classList.add('hidden');
   document.getElementById('appShell').classList.add('ready');
   showLoginMsg('', '');
+
+  // Honor the "Stay signed in" checkbox as it stood at the moment of sign-in.
+  if (!getStaySignedIn()) { try { google.accounts.id.disableAutoSelect(); } catch(e) {} }
 
   resetIdleTimer();
   await loadRecords(); // re-runs the full render pipeline (sorting, filters, dropdowns, etc.)
@@ -1635,7 +1661,16 @@ async function studentPasswordLogin() {
     const res  = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'studentLogin', studentId, studentPassword }) });
     const data = await res.json();
     if (data.status === 'ok') {
-      sessionStorage.setItem('studentAuth', JSON.stringify({ studentId, studentPassword }));
+      // "Stay signed in" → persist across browser restarts (localStorage);
+      // otherwise keep it only for this tab/session (sessionStorage).
+      const authPayload = JSON.stringify({ studentId, studentPassword });
+      if (getStaySignedIn()) {
+        localStorage.setItem('studentAuth', authPayload);
+        sessionStorage.removeItem('studentAuth');
+      } else {
+        sessionStorage.setItem('studentAuth', authPayload);
+        localStorage.removeItem('studentAuth');
+      }
       msgEl.textContent = data.isNewPassword
         ? 'Password created! Taking you to your Student Hub…'
         : 'Welcome back! Taking you to your Student Hub…';
@@ -1796,6 +1831,12 @@ function handleLogout() {
   currentIdToken = null;
   currentUserRole = 'admin';
   try { google.accounts.id.disableAutoSelect(); } catch(e) {}
+  // Explicit sign-out always fully clears saved credentials, even if
+  // "Stay signed in" was checked — the checkbox only skips re-login on
+  // return visits, it never overrides a deliberate Sign Out.
+  localStorage.removeItem('studentAuth');
+  sessionStorage.removeItem('studentAuth');
+  sessionStorage.removeItem('studentGoogleAuth');
   document.getElementById('appShell').classList.remove('ready');
   document.getElementById('loginOverlay').classList.remove('hidden');
   showLoginMsg('', '');
@@ -1804,16 +1845,23 @@ function handleLogout() {
 window.addEventListener('load', () => {
   applySavedTheme();
   applyColumnVisibility();
+  const staySignedIn = getStaySignedIn();
+  const stayChk = document.getElementById('staySignedInChk');
+  if (stayChk) stayChk.checked = staySignedIn;
   google.accounts.id.initialize({
     client_id: GOOGLE_CLIENT_ID,
     callback: handleCredentialResponse,
-    auto_select: true, // silently re-signs-in returning users (acts like "remember me")
+    auto_select: staySignedIn, // "Stay signed in" — silently re-signs-in returning users when enabled
   });
   google.accounts.id.renderButton(
     document.getElementById('gsiButtonWrap'),
     { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with' }
   );
-  google.accounts.id.prompt(); // triggers One Tap for returning users
+  if (staySignedIn) {
+    google.accounts.id.prompt(); // triggers One Tap for returning users
+  } else {
+    try { google.accounts.id.disableAutoSelect(); } catch(e) {}
+  }
 });
 
 let   nextSeq   = 245;
