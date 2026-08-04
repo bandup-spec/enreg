@@ -4882,12 +4882,20 @@ async function renderCertificateCanvas(kind, r) {
   };
 
   const bodyCenterX = W / 2 + design.bodyOffsetX * W;
-  const gapPx = lineHeight * 0.35;
+  // Gap between the two paragraphs, derived from the ORIGINAL fixed-position
+  // design (where each paragraph's own center sat a known distance apart —
+  // 0.0947*H for the student card, 0.0735*H for the guardian card). This
+  // reproduces the exact original spacing whenever both paragraphs are a
+  // single line (the common case), and only grows the gap when one of them
+  // actually needs a second line — instead of an arbitrary small gap that
+  // squeezed the whole block up against the divider above it.
+  const studentGapPx  = Math.max(lineHeight * 0.35, 0.0947 * H - lineHeight);
+  const guardianGapPx = Math.max(lineHeight * 0.35, 0.0735 * H - lineHeight);
 
   if (kind === 'student') {
-    drawCertParagraphPair(ctx, parseCertTemplate(getCertText('studentBody'), tokenValues), parseCertTemplate(getCertText('studentGiven'), tokenValues), bodyCenterX, 0.56885 + design.bodyOffsetY, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont, gapPx);
+    drawCertParagraphPair(ctx, parseCertTemplate(getCertText('studentBody'), tokenValues), parseCertTemplate(getCertText('studentGiven'), tokenValues), bodyCenterX, 0.56885 + design.bodyOffsetY, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont, studentGapPx);
   } else {
-    drawCertParagraphPair(ctx, parseCertTemplate(getCertText('guardianBody'), tokenValues), parseCertTemplate(getCertText('guardianGiven'), tokenValues), bodyCenterX, 0.57835 + design.bodyOffsetY, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont, gapPx);
+    drawCertParagraphPair(ctx, parseCertTemplate(getCertText('guardianBody'), tokenValues), parseCertTemplate(getCertText('guardianGiven'), tokenValues), bodyCenterX, 0.57835 + design.bodyOffsetY, H, maxWidth, bodyFontPx, lineHeight, bodyColor, design.bodyFont, guardianGapPx);
   }
 
   // Trim the template's outer "quiet zone" margin so the exported
