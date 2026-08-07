@@ -2973,9 +2973,10 @@ async function loadRecords() {
 }
 
 // ── INCOMING ARRIVALS (popup) ───────────────────────────────────────────────
-// Students whose Arrival Date falls from today through (and including) the
-// coming Monday — new batches typically start Mondays, so staff need
-// advance notice of who's landing beforehand to arrange pickup/orientation.
+// Students whose course Date Started falls from today through (and
+// including) the coming Monday — new batches always start on a Monday, so
+// this is effectively "who's arriving/starting soon", giving staff advance
+// notice to prepare pickup/orientation.
 function getIncomingArrivals() {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const day = today.getDay(); // 0=Sun..6=Sat
@@ -2985,7 +2986,7 @@ function getIncomingArrivals() {
   return allRecords
     .filter(r => !r.archived)
     .map(r => {
-      const iso = toInputDate(r.arrivalDate);
+      const iso = toInputDate(r.dateStarted);
       if (!iso) return null;
       const d = new Date(iso + 'T00:00:00');
       return isNaN(d) ? null : { r, d };
