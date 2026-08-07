@@ -1260,8 +1260,7 @@
     <div class="card">
       <div class="stats-bar" id="statsBar"></div>
       <div class="search-bar">
-        <input type="text" id="searchQuery" placeholder="Search by name or ID…" oninput="filterTable()">
-        <input type="text" id="searchCountry" placeholder="Country…" oninput="filterTable()">
+        <input type="text" id="searchQuery" placeholder="Search by name, ID, or country…" oninput="filterTable()" style="flex:2;min-width:220px;">
         <select id="searchCourse" onchange="filterTable()">
           <option value="">All courses</option>
           <option>ESL</option>
@@ -3266,17 +3265,18 @@ function normalizeSearchText(s) {
 }
 
 function filterTable() {
-  // Split into tokens and require each to appear somewhere in the name/ID,
-  // in ANY order — so searching "Cruz Juan" still finds "Juan Dela Cruz".
+  // ONE search box covers name, Student ID, AND country — split into tokens
+  // and require each to appear somewhere in that combined haystack, in ANY
+  // order, so searching "Cruz Juan" still finds "Juan Dela Cruz", and
+  // searching "Juan Japan" finds a Japanese student named Juan.
   const qTokens   = normalizeSearchText(document.getElementById('searchQuery').value).split(' ').filter(Boolean);
-  const country   = document.getElementById('searchCountry').value.toLowerCase();
   const course    = document.getElementById('searchCourse').value;
   const school    = document.getElementById('searchSchool').value;
   const campus    = document.getElementById('searchCampus').value;
   const archMode  = document.getElementById('searchArchived').value; // active | all | archived
   const dq        = document.getElementById('searchDataQuality').value;
   const filtered = allRecords.filter(r => {
-    const haystack = normalizeSearchText((r.fullName || '') + ' ' + (r.studentId || ''));
+    const haystack = normalizeSearchText((r.fullName || '') + ' ' + (r.studentId || '') + ' ' + (r.country || ''));
     const missingPhoto  = !r.photo;
     const missingCourse = !r.course;
     const missingCampus = !r.campus;
@@ -3287,7 +3287,6 @@ function filterTable() {
       (dq === 'no_campus'  && missingCampus) ||
       (dq === 'incomplete' && (missingPhoto || missingCourse || missingCampus));
     return qTokens.every(t => haystack.includes(t)) &&
-      (!country || (r.country||'').toLowerCase().includes(country)) &&
       (!course  || r.course === course) &&
       (!school  || (school === '__none__' ? !r.isCamp || !r.school : (r.isCamp && r.school === school))) &&
       (!campus  || r.campus === campus) &&
