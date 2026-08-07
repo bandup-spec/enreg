@@ -1317,6 +1317,7 @@
         <span id="bulkCount">0 selected</span>
         <button class="btn btn-ghost btn-sm" onclick="bulkMarkGraduated()">Mark Graduated Today</button>
         <button class="btn btn-success btn-sm" id="bulkIdCardBtn" onclick="bulkDownloadIdCards()">⬇ ID Cards (Front, PNG ZIP)</button>
+        <button class="btn btn-success btn-sm" onclick="exportXLSX('selected')" title="Export only the checked rows">⬇ Export Selected</button>
         <button class="btn btn-ghost btn-sm" onclick="bulkArchive(true)">Archive Selected</button>
         <button class="btn btn-ghost btn-sm" onclick="bulkArchive(false)">Restore Selected</button>
         <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Clear</button>
@@ -3307,11 +3308,22 @@ function sortFromDropdown() {
 }
 
 // ── EXPORT XLSX ───────────────────────────────────────────────────────────────
-function exportXLSX(onlyFiltered) {
-  const source = onlyFiltered ? currentFilteredRecords : allRecords;
-  if (!source.length) {
-    toast(onlyFiltered ? 'No matching records to export.' : 'No records to export.', 'error');
-    return;
+function exportXLSX(mode) {
+  // mode: false/'all' = every record, true/'filtered' = current search+sort,
+  // 'selected' = only the checkboxes the user actually ticked.
+  let source, suffix, label;
+  if (mode === 'selected') {
+    source = allRecords.filter(r => selectedRows.has(r.rowNo));
+    suffix = '_selected'; label = 'selected ';
+    if (!source.length) { toast('No records selected. Check some rows first.', 'error'); return; }
+  } else if (mode === true || mode === 'filtered') {
+    source = currentFilteredRecords;
+    suffix = '_filtered'; label = 'filtered ';
+    if (!source.length) { toast('No matching records to export.', 'error'); return; }
+  } else {
+    source = allRecords;
+    suffix = ''; label = '';
+    if (!source.length) { toast('No records to export.', 'error'); return; }
   }
   const headers = ['Student ID', 'Full Name', 'Campus', 'Country of Origin', 'Course', 'Type', 'Date Started', 'Date Ended', 'Date of Graduation', 'Birth Day', 'Sex', 'Week', 'Agency', 'Arrival Date', 'Flight No.', 'Arrival Time', 'Memo', 'Weeks', 'Is Camp', 'School', 'Last Edited By', 'Last Edited At', 'Archived', 'Origin School Descriptor'];
   const rows = source.map(r => [
@@ -3351,9 +3363,8 @@ function exportXLSX(onlyFiltered) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Records');
   const today = new Date().toISOString().slice(0,10);
-  const suffix = onlyFiltered ? '_filtered' : '';
   XLSX.writeFile(wb, `enrollment_records${suffix}_${today}.xlsx`);
-  toast(onlyFiltered ? `Exported ${source.length} filtered record${source.length!==1?'s':''}!` : 'Exported all records!', 'success');
+  toast(`Exported ${source.length} ${label}record${source.length!==1?'s':''}!`, 'success');
 }
 
 // ── EDIT MODAL ────────────────────────────────────────────────────────────────
