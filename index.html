@@ -511,6 +511,10 @@
   </div>
   <div style="display:flex; align-items:center; gap:16px;">
     <span class="stat-badge" id="totalBadge">— records</span>
+    <button class="logout-btn" id="arrivalsBellBtn" onclick="openArrivalsModal()" title="Incoming students" style="position:relative;">
+      <span class="btn-icon">✈️</span><span class="btn-label">Arrivals</span>
+      <span id="arrivalsBellBadge" style="position:absolute;top:-5px;right:-5px;background:#DC2626;color:#fff;font-size:10px;font-weight:700;line-height:1;padding:3px 5px;border-radius:20px;min-width:16px;text-align:center;display:none;"></span>
+    </button>
     <div class="user-chip">
       <img class="user-avatar" id="userAvatar" src="" alt="">
       <span class="user-email" id="userEmail"></span>
@@ -918,6 +922,25 @@
 
 <div id="idCardBackTemplate">
   <img id="idcBackImg" src="" alt="">
+</div>
+
+<!-- INCOMING ARRIVALS MODAL — students arriving today through (and including)
+     the coming Monday, since new batches typically start Mondays and staff
+     need advance notice to arrange pickup/orientation. -->
+<div class="modal-overlay" id="arrivalsModal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <span class="modal-title">✈️ Incoming Students</span>
+      <button class="modal-close" onclick="closeArrivalsModal()">✕</button>
+    </div>
+    <div class="modal-body" id="arrivalsModalBody" style="padding:0;"></div>
+    <div class="modal-footer">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;">
+        <input type="checkbox" id="arrivalsDismissChk" style="width:14px;height:14px;accent-color:var(--accent);"> Don't show again today
+      </label>
+      <button class="btn btn-primary btn-sm ml-auto" onclick="closeArrivalsModal()">Got it</button>
+    </div>
+  </div>
 </div>
 
 <!-- EDIT MODAL -->
@@ -1561,6 +1584,7 @@ async function handleCredentialResponse(response) {
   applyDefaultCampusFilter();
   applyDefaultLandingTab();
   loadSchools();
+  maybeShowArrivalsPopup();
 }
 
 // Student ID + Password sign-in — the second option on the same login
@@ -2941,10 +2965,98 @@ async function loadRecords() {
     filterTable();
     renderStats();
     document.getElementById('totalBadge').textContent = allRecords.filter(r => !r.archived).length + ' records';
+    updateArrivalsBell();
   } catch(e) {
     document.getElementById('recordsBody').innerHTML =
       '<tr><td colspan="15" style="text-align:center;padding:48px;color:var(--danger);">Failed to load records.</td></tr>';
   }
+}
+
+// ── INCOMING ARRIVALS (popup) ───────────────────────────────────────────────
+// Students whose Arrival Date falls from today through (and including) the
+// coming Monday — new batches typically start Mondays, so staff need
+// advance notice of who's landing beforehand to arrange pickup/orientation.
+function getIncomingArrivals() {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = today.getDay(); // 0=Sun..6=Sat
+  const daysUntilMonday = day === 1 ? 0 : (8 - day) % 7; // 0 if today IS Monday
+  const nextMonday = new Date(today); nextMonday.setDate(today.getDate() + daysUntilMonday);
+
+  return allRecords
+    .filter(r => !r.archived)
+    .map(r => {
+      const iso = toInputDate(r.arrivalDate);
+      if (!iso) return null;
+      const d = new Date(iso + 'T00:00:00');
+      return isNaN(d) ? null : { r, d };
+    })
+    .filter(x => x && x.d >= today && x.d <= nextMonday)
+    .sort((a, b) => a.d - b.d)
+    .map(x => ({ ...x, isMonday: x.d.getDay() === 1, isToday: x.d.getTime() === today.getTime() }));
+}
+
+// Keeps the header bell badge in sync — call every time records reload.
+// The bell button itself always stays visible (so it's easy to find and
+// check anytime); only the red count badge toggles on/off.
+function updateArrivalsBell() {
+  const btn = document.getElementById('arrivalsBellBtn');
+  if (!btn) return;
+  if (isStudent()) { btn.style.display = 'none'; return; }
+  btn.style.display = '';
+  const badge = document.getElementById('arrivalsBellBadge');
+  const incoming = getIncomingArrivals();
+  if (incoming.length) {
+    badge.textContent = incoming.length;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function renderArrivalsList() {
+  const incoming = getIncomingArrivals();
+  const body = document.getElementById('arrivalsModalBody');
+  if (!incoming.length) {
+    body.innerHTML = `<div style="padding:32px;text-align:center;color:var(--muted);">No students arriving between now and Monday. 🎉</div>`;
+    return;
+  }
+  const rows = incoming.map(({ r, d, isMonday, isToday }) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);${isMonday ? 'background:rgba(37,99,235,.06);' : ''}">
+      <div style="min-width:0;">
+        <div style="font-weight:600;">${escapeHtml(r.fullName || '—')}</div>
+        <div style="font-size:12px;color:var(--muted);">${campusBadge(r.campus)}${r.flightNo ? ' · ✈ ' + escapeHtml(r.flightNo) : ''}${r.arrivalTime ? ' · ' + escapeHtml(r.arrivalTime) : ''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-weight:700;color:${isMonday ? 'var(--accent-dk)' : 'var(--ink)'};white-space:nowrap;">${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+        ${isToday ? `<div style="font-size:10.5px;font-weight:700;color:#DC2626;">TODAY</div>` : isMonday ? `<div style="font-size:10.5px;font-weight:700;color:var(--accent-dk);">MONDAY START</div>` : ''}
+      </div>
+    </div>`).join('');
+  body.innerHTML = `
+    <div style="padding:14px 20px 10px;font-size:12.5px;color:var(--muted);">${incoming.length} student${incoming.length !== 1 ? 's' : ''} arriving between now and Monday:</div>
+    ${rows}`;
+}
+
+function openArrivalsModal() {
+  renderArrivalsList();
+  const chk = document.getElementById('arrivalsDismissChk');
+  if (chk) chk.checked = false;
+  document.getElementById('arrivalsModal').classList.add('open');
+}
+function closeArrivalsModal() {
+  const chk = document.getElementById('arrivalsDismissChk');
+  if (chk && chk.checked) {
+    localStorage.setItem('enreg_arrivalsPopupDismissedOn', new Date().toISOString().slice(0, 10));
+  }
+  document.getElementById('arrivalsModal').classList.remove('open');
+}
+// Auto-pops the modal once after login if there are incoming arrivals and
+// the user hasn't already dismissed-for-today. Safe to call on every login
+// — the localStorage date check keeps it to at most once per day per device.
+function maybeShowArrivalsPopup() {
+  if (isStudent()) return;
+  if (!getIncomingArrivals().length) return;
+  if (localStorage.getItem('enreg_arrivalsPopupDismissedOn') === new Date().toISOString().slice(0, 10)) return;
+  openArrivalsModal();
 }
 
 // ── DASHBOARD STATS ───────────────────────────────────────────────────────────
