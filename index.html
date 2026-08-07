@@ -188,6 +188,41 @@
     --ink:       #F5F7FB;
     --ink-lt:    #E2E8F5;
   }
+
+  /* ── PALETTE PRESETS — tint the bg/surface/border trio only; --accent is
+     handled separately (in JS) so any palette × any accent color combine
+     freely. Each needs its own light AND dark variant. ────────────────── */
+  body.theme-ocean       { --bg:#EEF3F8; --surface:#FFFFFF; --border:#D7E3EE; --border-dk:#BFD1E3; }
+  body.theme-ocean.dark  { --bg:#0B1520; --surface:#141F30; --border:#22344A; --border-dk:#2C445F; }
+  body.theme-warm        { --bg:#F7F4EE; --surface:#FFFEFB; --border:#EAE3D3; --border-dk:#DDD3BB; }
+  body.theme-warm.dark   { --bg:#1A140F; --surface:#241C15; --border:#3A2E22; --border-dk:#4A3B2B; }
+
+  /* ── HIGH CONTRAST MODE — thicker borders + swap muted grays for the
+     stronger --text-2 tone, on top of whichever mode/palette is active. ── */
+  body.high-contrast { font-size: 15px; --muted: var(--text-2); --muted-lt: var(--text-2); --border: var(--border-dk); }
+  body.high-contrast .btn, body.high-contrast .field input, body.high-contrast .field select,
+  body.high-contrast .search-bar input, body.high-contrast .search-bar select,
+  body.high-contrast .card, body.high-contrast .modal, body.high-contrast table,
+  body.high-contrast thead th { border-width: 2px; }
+
+  /* ── APPEARANCE SETTINGS CONTROLS ─────────────────────────────────────── */
+  .theme-mode-btn, .theme-palette-btn { flex: 1; height: 34px; border-radius: 7px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all .12s; }
+  .theme-mode-btn:hover, .theme-palette-btn:hover { border-color: var(--accent); }
+  .theme-mode-btn.active, .theme-palette-btn.active { border-color: var(--accent); background: var(--accent-lt); color: var(--accent-dk); }
+  .accent-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; padding: 0; transition: transform .12s; }
+  .accent-swatch:hover { transform: scale(1.1); }
+  .accent-swatch.active { border-color: var(--ink); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+
+  /* ── SETTINGS MODAL — collapsible category sections ("accordion"), so the
+     modal opens compact and each group expands on demand. ─────────────── */
+  .settings-section { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
+  .settings-section:last-child { margin-bottom: 0; }
+  .settings-section-header { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--bg); border: none; cursor: pointer; font-family: inherit; font-size: 13.5px; font-weight: 700; color: var(--text); transition: background .12s; }
+  .settings-section-header:hover { background: var(--accent-lt); }
+  .settings-section-chevron { transition: transform .18s; color: var(--muted); font-size: 11px; }
+  .settings-section.open .settings-section-chevron { transform: rotate(180deg); }
+  .settings-section-body { display: none; padding: 18px 16px 4px; }
+  .settings-section.open .settings-section-body { display: block; }
   .modal { background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; transform: translateY(14px) scale(.985); transition: transform .22s cubic-bezier(.2,.9,.3,1); }
   .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
   .switch input { opacity: 0; width: 0; height: 0; }
@@ -657,84 +692,128 @@
       <button class="modal-close" onclick="closeSettingsModal()">✕</button>
     </div>
     <div class="modal-body">
-      <div class="field" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-        <div>
-          <label style="display:block;">Dark Mode</label>
-          <span class="field-hint" style="display:block;margin-top:2px;">Easier on the eyes in low light.</span>
+      <div class="settings-section open">
+        <button type="button" class="settings-section-header" onclick="toggleSettingsSection(this)">
+          <span>🎨 Appearance</span><span class="settings-section-chevron">▾</span>
+        </button>
+        <div class="settings-section-body">
+          <div class="field" style="margin-bottom:6px;">
+            <label style="display:block;margin-bottom:8px;">Theme</label>
+            <div style="display:flex;gap:6px;margin-bottom:12px;">
+              <button type="button" class="theme-mode-btn" data-mode="light" onclick="setThemeMode('light')">☀ Light</button>
+              <button type="button" class="theme-mode-btn" data-mode="dark" onclick="setThemeMode('dark')">🌙 Dark</button>
+              <button type="button" class="theme-mode-btn" data-mode="auto" onclick="setThemeMode('auto')">💻 Auto</button>
+            </div>
+            <span class="field-hint" style="display:block;margin-bottom:6px;">Palette</span>
+            <div style="display:flex;gap:6px;margin-bottom:14px;">
+              <button type="button" class="theme-palette-btn" data-palette="slate" onclick="setThemePalette('slate')">Slate</button>
+              <button type="button" class="theme-palette-btn" data-palette="ocean" onclick="setThemePalette('ocean')">🌊 Ocean</button>
+              <button type="button" class="theme-palette-btn" data-palette="warm" onclick="setThemePalette('warm')">☕ Warm</button>
+            </div>
+            <span class="field-hint" style="display:block;margin-bottom:6px;">Accent Color</span>
+            <div style="display:flex;gap:9px;margin-bottom:16px;" id="accentSwatchRow"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <label style="display:block;">High Contrast Mode</label>
+                <span class="field-hint" style="display:block;margin-top:2px;">Thicker borders, stronger text — easier to read.</span>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="highContrastToggle" onchange="toggleHighContrast(this.checked)">
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
-        <label class="switch">
-          <input type="checkbox" id="darkModeToggle" onchange="toggleDarkMode(this.checked)">
-          <span class="switch-slider"></span>
-        </label>
-      </div>
-      <div class="field">
-        <label>Rows Per Page</label>
-        <select id="pageSizeSelect" onchange="changePageSize(this.value)">
-          <option value="25">25</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
-          <option value="200">200</option>
-        </select>
-        <span class="field-hint" style="display:block;margin-top:4px;">How many student records show per page in the table.</span>
       </div>
 
-      <div class="field" style="margin-top:18px;">
-        <label>Auto-Logout After Inactivity</label>
-        <select id="idleTimeoutSelect" onchange="changeIdleTimeout(this.value)">
-          <option value="0">Never</option>
-          <option value="10">10 minutes</option>
-          <option value="20">20 minutes</option>
-          <option value="30">30 minutes</option>
-          <option value="60">60 minutes</option>
-        </select>
-        <span class="field-hint" style="display:block;margin-top:4px;">Recommended on shared front-desk computers, so no one's left signed in by accident.</span>
+      <div class="settings-section">
+        <button type="button" class="settings-section-header" onclick="toggleSettingsSection(this)">
+          <span>🗂️ Table &amp; Display</span><span class="settings-section-chevron">▾</span>
+        </button>
+        <div class="settings-section-body">
+          <div class="field">
+            <label>Rows Per Page</label>
+            <select id="pageSizeSelect" onchange="changePageSize(this.value)">
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+            </select>
+            <span class="field-hint" style="display:block;margin-top:4px;">How many student records show per page in the table.</span>
+          </div>
+
+          <div class="field" style="margin-top:18px;">
+            <label>Default Landing Tab</label>
+            <select id="defaultTabSelect" onchange="changeDefaultTab(this.value)">
+              <option value="add">Add Student</option>
+              <option value="import">Bulk Import</option>
+              <option value="records">Records</option>
+              <option value="dashboard">Dashboard</option>
+              <option value="activity">Activity Log</option>
+            </select>
+            <span class="field-hint" style="display:block;margin-top:4px;">The section you land on right after signing in, instead of Add Student every time.</span>
+          </div>
+
+          <div class="field" style="margin-top:18px;">
+            <label>Default Campus Filter</label>
+            <select id="defaultCampusSelect" onchange="changeDefaultCampus(this.value)">
+              <option value="">All Campuses</option>
+            </select>
+            <span class="field-hint" style="display:block;margin-top:4px;">Automatically filters the table to this campus every time you sign in.</span>
+          </div>
+
+          <div class="field" style="margin-top:18px;">
+            <label style="display:block;margin-bottom:8px;">Table Columns</label>
+            <div id="colVisibilityList" style="display:flex;flex-direction:column;gap:8px;"></div>
+            <span class="field-hint" style="display:block;margin-top:8px;">Ticked checkboxes are the only ones shown in your record.</span>
+          </div>
+        </div>
       </div>
 
-      <div class="field" style="margin-top:18px;">
-        <label>Default Landing Tab</label>
-        <select id="defaultTabSelect" onchange="changeDefaultTab(this.value)">
-          <option value="add">Add Student</option>
-          <option value="import">Bulk Import</option>
-          <option value="records">Records</option>
-          <option value="dashboard">Dashboard</option>
-          <option value="activity">Activity Log</option>
-        </select>
-        <span class="field-hint" style="display:block;margin-top:4px;">The section you land on right after signing in, instead of Add Student every time.</span>
+      <div class="settings-section">
+        <button type="button" class="settings-section-header" onclick="toggleSettingsSection(this)">
+          <span>🔒 Session &amp; Security</span><span class="settings-section-chevron">▾</span>
+        </button>
+        <div class="settings-section-body">
+          <div class="field">
+            <label>Auto-Logout After Inactivity</label>
+            <select id="idleTimeoutSelect" onchange="changeIdleTimeout(this.value)">
+              <option value="0">Never</option>
+              <option value="10">10 minutes</option>
+              <option value="20">20 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="60">60 minutes</option>
+            </select>
+            <span class="field-hint" style="display:block;margin-top:4px;">Recommended on shared front-desk computers, so no one's left signed in by accident.</span>
+          </div>
+        </div>
       </div>
 
-      <div class="field" style="margin-top:18px;">
-        <label>Default Campus Filter</label>
-        <select id="defaultCampusSelect" onchange="changeDefaultCampus(this.value)">
-          <option value="">All Campuses</option>
-        </select>
-        <span class="field-hint" style="display:block;margin-top:4px;">Automatically filters the table to this campus every time you sign in.</span>
-      </div>
+      <div class="settings-section">
+        <button type="button" class="settings-section-header" onclick="toggleSettingsSection(this)">
+          <span>🎓 Certificate Wording</span><span class="settings-section-chevron">▾</span>
+        </button>
+        <div class="settings-section-body">
+          <div class="field">
+            <span class="field-hint" style="display:block;margin-bottom:10px;">Edit the two sentences printed on each certificate. Use «Course» «Type» «Weeks» «Date_Started» «Date_Ended» «Date_of_Graduation» «Venue» anywhere you want that value auto-filled — an empty «Type» is skipped cleanly. «Venue» auto-fills the correct campus address (Mabolo, USPF, or IAU) based on each student's Campus field.</span>
 
-      <div class="field" style="margin-top:18px;">
-        <label style="display:block;margin-bottom:8px;">Table Columns</label>
-        <div id="colVisibilityList" style="display:flex;flex-direction:column;gap:6px;"></div>
-        <span class="field-hint" style="display:block;margin-top:4px;">Hide columns you don't check often to keep the table focused.</span>
-      </div>
+            <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Student — completion line</label>
+            <textarea id="certText_studentBody" rows="2" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('studentBody')"></textarea>
+            <button class="btn btn-ghost btn-sm" style="margin:4px 0 12px;padding:3px 10px;font-size:11px;" onclick="resetCertText('studentBody')">Reset to default</button>
 
-      <div class="field" style="margin-top:18px;">
-        <label style="display:block;margin-bottom:6px;">Certificate Wording</label>
-        <span class="field-hint" style="display:block;margin-bottom:10px;">Edit the two sentences printed on each certificate. Use «Course» «Type» «Weeks» «Date_Started» «Date_Ended» «Date_of_Graduation» «Venue» anywhere you want that value auto-filled — an empty «Type» is skipped cleanly. «Venue» auto-fills the correct campus address (Mabolo, USPF, or IAU) based on each student's Campus field.</span>
+            <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Student — "Given this…" line</label>
+            <textarea id="certText_studentGiven" rows="2" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('studentGiven')"></textarea>
+            <button class="btn btn-ghost btn-sm" style="margin:4px 0 12px;padding:3px 10px;font-size:11px;" onclick="resetCertText('studentGiven')">Reset to default</button>
 
-        <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Student — completion line</label>
-        <textarea id="certText_studentBody" rows="2" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('studentBody')"></textarea>
-        <button class="btn btn-ghost btn-sm" style="margin:4px 0 12px;padding:3px 10px;font-size:11px;" onclick="resetCertText('studentBody')">Reset to default</button>
+            <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Guardian — appreciation line</label>
+            <textarea id="certText_guardianBody" rows="3" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('guardianBody')"></textarea>
+            <button class="btn btn-ghost btn-sm" style="margin:4px 0 12px;padding:3px 10px;font-size:11px;" onclick="resetCertText('guardianBody')">Reset to default</button>
 
-        <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Student — "Given this…" line</label>
-        <textarea id="certText_studentGiven" rows="2" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('studentGiven')"></textarea>
-        <button class="btn btn-ghost btn-sm" style="margin:4px 0 12px;padding:3px 10px;font-size:11px;" onclick="resetCertText('studentGiven')">Reset to default</button>
-
-        <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Guardian — appreciation line</label>
-        <textarea id="certText_guardianBody" rows="3" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('guardianBody')"></textarea>
-        <button class="btn btn-ghost btn-sm" style="margin:4px 0 12px;padding:3px 10px;font-size:11px;" onclick="resetCertText('guardianBody')">Reset to default</button>
-
-        <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Guardian — "Given this…" line</label>
-        <textarea id="certText_guardianGiven" rows="2" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('guardianGiven')"></textarea>
-        <button class="btn btn-ghost btn-sm" style="margin:4px 0 0;padding:3px 10px;font-size:11px;" onclick="resetCertText('guardianGiven')">Reset to default</button>
+            <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;">Guardian — "Given this…" line</label>
+            <textarea id="certText_guardianGiven" rows="2" style="width:100%;font-family:inherit;font-size:12.5px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);resize:vertical;" onchange="saveCertTextFromInput('guardianGiven')"></textarea>
+            <button class="btn btn-ghost btn-sm" style="margin:4px 0 0;padding:3px 10px;font-size:11px;" onclick="resetCertText('guardianGiven')">Reset to default</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1745,15 +1824,74 @@ function goToStudentHub() {
 }
 
 // ── SETTINGS MODAL (dark mode + rows per page) ──────────────────────────
-function applySavedTheme() {
-  const dark = localStorage.getItem('enreg_darkMode') === '1';
-  document.body.classList.toggle('dark', dark);
-  const toggle = document.getElementById('darkModeToggle');
-  if (toggle) toggle.checked = dark;
+// ── APPEARANCE (theme mode, palette, accent color, high contrast) ──────────
+const ACCENT_PRESETS = {
+  blue:   { accent: '#2563EB', dk: '#1D4ED8', lt: '#EEF3FF', ltDark: '#1E2A4A' },
+  green:  { accent: '#059669', dk: '#047857', lt: '#ECFDF5', ltDark: '#0F2A22' },
+  purple: { accent: '#7C3AED', dk: '#6D28D9', lt: '#F5F3FF', ltDark: '#241B42' },
+  amber:  { accent: '#D97706', dk: '#B45309', lt: '#FFFBEB', ltDark: '#2E2210' },
+  rose:   { accent: '#E11D48', dk: '#BE123C', lt: '#FFF1F2', ltDark: '#3A1620' },
+  teal:   { accent: '#0D9488', dk: '#0F766E', lt: '#F0FDFA', ltDark: '#0C2B29' },
+};
+let systemDarkMql = null; // wired up once, keeps "Auto" live if the OS theme changes mid-session
+
+// 'enreg_darkMode' was the old boolean-only setting — read it once as a
+// migration fallback so existing users don't get bounced back to light mode.
+function getThemeMode()    { return localStorage.getItem('enreg_themeMode') || (localStorage.getItem('enreg_darkMode') === '1' ? 'dark' : 'light'); }
+function getThemePalette() { return localStorage.getItem('enreg_themePalette') || 'slate'; }
+function getAccentChoice() { return localStorage.getItem('enreg_accentColor') || 'blue'; }
+function getHighContrast() { return localStorage.getItem('enreg_highContrast') === '1'; }
+
+function resolveIsDark(mode) {
+  if (mode === 'dark') return true;
+  if (mode === 'light') return false;
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); // auto
 }
-function toggleDarkMode(on) {
-  localStorage.setItem('enreg_darkMode', on ? '1' : '0');
-  document.body.classList.toggle('dark', on);
+
+function applyAccent(isDark) {
+  const p = ACCENT_PRESETS[getAccentChoice()] || ACCENT_PRESETS.blue;
+  document.body.style.setProperty('--accent', p.accent);
+  document.body.style.setProperty('--accent-dk', p.dk);
+  document.body.style.setProperty('--accent-lt', isDark ? p.ltDark : p.lt);
+}
+
+function applySavedTheme() {
+  const mode = getThemeMode();
+  const isDark = resolveIsDark(mode);
+  document.body.classList.toggle('dark', isDark);
+  document.body.classList.remove('theme-ocean', 'theme-warm');
+  const palette = getThemePalette();
+  if (palette !== 'slate') document.body.classList.add('theme-' + palette);
+  document.body.classList.toggle('high-contrast', getHighContrast());
+  applyAccent(isDark);
+
+  if (!systemDarkMql && window.matchMedia) {
+    systemDarkMql = window.matchMedia('(prefers-color-scheme: dark)');
+    systemDarkMql.addEventListener('change', () => { if (getThemeMode() === 'auto') applySavedTheme(); });
+  }
+  updateThemeSettingsUI();
+}
+
+function updateThemeSettingsUI() {
+  const mode = getThemeMode(), palette = getThemePalette(), accent = getAccentChoice();
+  document.querySelectorAll('.theme-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  document.querySelectorAll('.theme-palette-btn').forEach(b => b.classList.toggle('active', b.dataset.palette === palette));
+  document.querySelectorAll('.accent-swatch').forEach(b => b.classList.toggle('active', b.dataset.accent === accent));
+  const hc = document.getElementById('highContrastToggle');
+  if (hc) hc.checked = getHighContrast();
+}
+
+function setThemeMode(mode)       { localStorage.setItem('enreg_themeMode', mode); applySavedTheme(); }
+function setThemePalette(palette) { localStorage.setItem('enreg_themePalette', palette); applySavedTheme(); }
+function setAccentColor(key)      { localStorage.setItem('enreg_accentColor', key); applySavedTheme(); }
+function toggleHighContrast(on)   { localStorage.setItem('enreg_highContrast', on ? '1' : '0'); applySavedTheme(); }
+
+function renderAccentSwatches() {
+  const row = document.getElementById('accentSwatchRow');
+  if (!row || row.childElementCount) return; // build once
+  row.innerHTML = Object.entries(ACCENT_PRESETS).map(([key, p]) =>
+    `<button type="button" class="accent-swatch" data-accent="${key}" onclick="setAccentColor('${key}')" style="background:${p.accent};" title="${key.charAt(0).toUpperCase() + key.slice(1)}"></button>`
+  ).join('');
 }
 function changePageSize(val) {
   PAGE_SIZE = parseInt(val, 10) || 50;
@@ -1779,11 +1917,14 @@ function toggleColumn(col, visible) {
   localStorage.setItem('enreg_hiddenCols', JSON.stringify(hidden));
   applyColumnVisibility();
 }
+function toggleSettingsSection(headerBtn) {
+  headerBtn.parentElement.classList.toggle('open');
+}
 function renderColumnVisibilityList() {
   const hidden = getHiddenCols();
   document.getElementById('colVisibilityList').innerHTML = TOGGLEABLE_COLUMNS.map(col => `
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer;">
-      <input type="checkbox" ${hidden.includes(col) ? '' : 'checked'} onchange="toggleColumn('${col}', this.checked)">
+    <label style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text-2);cursor:pointer;">
+      <input type="checkbox" ${hidden.includes(col) ? '' : 'checked'} onchange="toggleColumn('${col}', this.checked)" style="width:17px;height:17px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;">
       ${col}
     </label>
   `).join('');
@@ -1845,7 +1986,8 @@ function applyDefaultLandingTab() {
   switchTab(tab);
 }
 function openSettingsModal() {
-  document.getElementById('darkModeToggle').checked = document.body.classList.contains('dark');
+  renderAccentSwatches();
+  updateThemeSettingsUI();
   document.getElementById('pageSizeSelect').value = String(PAGE_SIZE);
   document.getElementById('idleTimeoutSelect').value = String(getIdleTimeoutMinutes());
   document.getElementById('defaultTabSelect').value = getDefaultTab();
