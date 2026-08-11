@@ -3196,8 +3196,8 @@ function renderArrivalsList() {
   const rows = incoming.map(({ r, d, isMonday, isToday }) => `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);${isMonday ? 'background:rgba(37,99,235,.06);' : ''}">
       <div style="min-width:0;">
-        <div style="font-weight:600;">${escapeHtml(r.fullName || '—')}</div>
-        <div style="font-size:12px;color:var(--muted);">${campusBadge(r.campus)}${r.flightNo ? ' · ✈ ' + escapeHtml(r.flightNo) : ''}${r.arrivalTime ? ' · ' + escapeHtml(r.arrivalTime) : ''}</div>
+        <div style="font-weight:600;">${escapeHtml(r.fullName || '—')}${r.isCamp ? `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#064E3B;color:#D1FAE5;margin-left:6px;vertical-align:middle;">CAMP</span>` : `<span style="display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:var(--muted-lt);color:var(--text-2);margin-left:6px;vertical-align:middle;">REGULAR</span>`}</div>
+        <div style="font-size:12px;color:var(--muted);">${campusBadge(r.campus)}${r.isCamp && r.school ? ' · ' + escapeHtml(r.school) : ''}${r.flightNo ? ' · ✈ ' + escapeHtml(r.flightNo) : ''}${r.arrivalTime ? ' · ' + escapeHtml(r.arrivalTime) : ''}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;">
         <div style="font-weight:700;color:${isMonday ? 'var(--accent-dk)' : 'var(--ink)'};white-space:nowrap;">${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
