@@ -341,7 +341,18 @@
     .login-overlay, .site-header, .tabs, .search-bar, .bulk-bar, .pagination-bar,
     .modal-overlay, .toast-wrap, th:first-child, td:first-child,
     th:last-child, td:last-child { display: none !important; }
-    body, .app-shell { background: white !important; }
+    /* Printed pages must stay legible regardless of the on-screen theme —
+       force every text/surface variable back to the light defaults so dark
+       mode, palettes, and custom accents never bleed into the printout.
+       Previously only the background was forced white, but --ink (used for
+       student names) kept its dark-mode near-white value — white text on
+       white paper, unreadable. */
+    body, .app-shell {
+      background: white !important;
+      --bg: #F3F4F7; --surface: #FFFFFF; --border: #E4E7EC; --border-dk: #D3D8E0;
+      --text: #14171F; --text-2: #333844; --muted: #667085; --muted-lt: #98A2B3;
+      --ink: #0F172A; --ink-lt: #1E293B;
+    }
     .card { box-shadow: none !important; border: none !important; }
     table { width: 100% !important; }
   }
