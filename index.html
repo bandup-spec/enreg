@@ -614,6 +614,7 @@
         <button class="header-burger-btn" id="headerBurgerBtn" onclick="toggleHeaderMenu(event)" title="Menu" aria-label="Menu">☰</button>
         <div class="header-burger-menu" id="headerBurgerMenu">
           <button class="header-burger-item" id="headerBurgerArrivalsItem" onclick="closeHeaderMenu();openArrivalsModal()"><span class="btn-icon">✈️</span> Arrivals <span id="headerBurgerArrivalsBadge" style="margin-left:auto;background:#DC2626;color:#fff;font-size:10px;font-weight:700;line-height:1;padding:3px 6px;border-radius:20px;display:none;"></span></button>
+          <button class="header-burger-item" id="headerBurgerSchedulerItem" onclick="closeHeaderMenu();window.location.href='scheduler.html'"><span class="btn-icon">🗓️</span> Scheduler</button>
           <button class="header-burger-item" onclick="closeHeaderMenu();openMyAccountModal()"><span class="btn-icon">👤</span> Profile</button>
           <button class="header-burger-item" onclick="closeHeaderMenu();openSettingsModal()"><span class="btn-icon">⚙</span> Settings</button>
           <button class="header-burger-item danger" onclick="closeHeaderMenu();handleLogout()"><span class="btn-icon">⇥</span> Sign out</button>
@@ -1596,6 +1597,8 @@ function applyRolePermissions() {
   if (addItem) addItem.style.display = isStudent() ? 'none' : '';
   if (importItem) importItem.style.display = isStudent() ? 'none' : '';
   if (activityItem) activityItem.style.display = (isEncoder() || isStudent()) ? 'none' : '';
+  const schedulerItem = document.getElementById('headerBurgerSchedulerItem');
+  if (schedulerItem) schedulerItem.style.display = isStudent() ? 'none' : '';
   if (isStudent()) {
     // Nothing to add/import as a student — land straight on Records,
     // which (per the backend) will only ever contain their own row.
