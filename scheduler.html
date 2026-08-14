@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scheduler — Enrollment Registry</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:        #F3F4F7;
+    --surface:   #FFFFFF;
+    --border:    #E4E7EC;
+    --border-dk: #D3D8E0;
+    --text:      #14171F;
+    --text-2:    #333844;
+    --muted:     #667085;
+    --muted-lt:  #98A2B3;
+    --accent:    #2563EB;
+    --accent-dk: #1D4ED8;
+    --accent-lt: #EEF3FF;
+    --ink:       #0F172A;
+    --ink-lt:    #1E293B;
+    --success:   #059669;
+    --success-lt:#ECFDF5;
+    --danger:    #DC2626;
+    --danger-lt: #FEF2F2;
+    --warn:      #D97706;
+    --warn-lt:   #FFFBEB;
+    --radius:    10px;
+    --radius-lg: 14px;
+    --shadow-xs: 0 1px 2px rgba(16,24,40,.05);
+    --shadow:    0 1px 2px rgba(16,24,40,.06), 0 4px 14px rgba(16,24,40,.05);
+    --shadow-md: 0 4px 10px rgba(16,24,40,.06), 0 10px 26px rgba(16,24,40,.07);
+    --shadow-lg: 0 12px 20px -6px rgba(16,24,40,.1), 0 24px 48px -12px rgba(16,24,40,.16);
+  }
+  body.dark {
+    --bg:#0F1420; --surface:#1A2033; --border:#2A3247; --border-dk:#384259;
+    --text:#EAECF0; --text-2:#CBD2E1; --muted:#8B94AC; --muted-lt:#6B7488;
+    --accent-lt:#1E2A4A; --success-lt:#0F2A22; --danger-lt:#2E1618; --warn-lt:#2E2210;
+    --ink:#F5F7FB; --ink-lt:#E2E8F5;
+  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; }
+
+  /* ── Header ───────────────────────────────────────────────────────── */
+  .site-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 62px; position: sticky; top: 0; z-index: 100; box-shadow: 0 1px 0 rgba(16,24,40,.03); }
+  .logo { display: flex; align-items: center; gap: 11px; text-decoration: none; }
+  .logo-mark { width: 34px; height: 34px; background: linear-gradient(155deg, var(--accent) 0%, var(--accent-dk) 100%); border-radius: 9px; display: flex; align-items: center; justify-content: center; color: white; font-size: 15px; font-weight: 600; font-family: 'DM Serif Display', serif; box-shadow: 0 2px 6px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.2); }
+  .logo-text { font-family: 'DM Serif Display', serif; font-size: 17px; color: var(--ink); }
+  .logo-text small { display: block; font-family: 'DM Sans', sans-serif; font-size: 10.5px; font-weight: 600; color: var(--muted); letter-spacing: .3px; margin-top: 1px; }
+  .back-link { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--muted); text-decoration: none; padding: 7px 12px; border-radius: 8px; border: 1.5px solid var(--border); }
+  .back-link:hover { color: var(--accent-dk); border-color: var(--accent); background: var(--accent-lt); }
+  .header-right { display: flex; align-items: center; gap: 14px; }
+  .user-chip { display: flex; align-items: center; gap: 9px; padding: 5px 12px 5px 6px; border-radius: 22px; background: var(--bg); border: 1px solid var(--border); }
+  .user-chip img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
+  .user-chip span { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+  .icon-btn { width: 34px; height: 34px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent-dk); background: var(--accent-lt); }
+
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 26px 32px 60px; }
+
+  /* ── Tabs ─────────────────────────────────────────────────────────── */
+  .tabs { display: flex; gap: 2px; margin-bottom: 22px; background: var(--border); padding: 3px; border-radius: 13px; width: fit-content; }
+  .tab { padding: 9px 22px; border: none; background: transparent; border-radius: var(--radius); font-family: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .18s; letter-spacing: .1px; display: flex; align-items: center; gap: 7px; }
+  .tab.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-xs); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Cards / forms ────────────────────────────────────────────────── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); margin-bottom: 22px; }
+  .card-header { padding: 18px 24px 15px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .card-title { font-family: 'DM Serif Display', serif; font-size: 18px; font-weight: 400; letter-spacing: -0.3px; color: var(--ink); }
+  .card-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .card-body { padding: 22px 24px; }
+
+  .btn { display: inline-flex; align-items: center; gap: 7px; padding: 0 18px; height: 38px; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all .14s; letter-spacing: .1px; white-space: nowrap; }
+  .btn-primary { background: var(--accent); color: white; box-shadow: 0 1px 2px rgba(37,99,235,.15), 0 2px 8px rgba(37,99,235,.25); }
+  .btn-primary:hover { background: var(--accent-dk); }
+  .btn-ghost { background: var(--surface); color: var(--text-2); border: 1.5px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent-dk); background: var(--accent-lt); }
+  .btn-danger { background: var(--danger-lt); color: var(--danger); border: 1.5px solid transparent; }
+  .btn-danger:hover { border-color: var(--danger); }
+  .btn-sm { height: 30px; padding: 0 12px; font-size: 12px; }
+  .btn[disabled] { opacity: .55; cursor: not-allowed; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; font-weight: 700; color: var(--text-2); letter-spacing: .1px; }
+  .field input, .field select { height: 38px; padding: 0 12px; border: 1.5px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 13.5px; color: var(--text); background: var(--surface); outline: none; }
+  .field input:focus, .field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+  .field-hint { font-size: 11px; color: var(--muted-lt); }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip-toggle { padding: 7px 14px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--surface); font-family: inherit; font-size: 12.5px; font-weight: 700; color: var(--text-2); cursor: pointer; transition: all .12s; }
+  .chip-toggle.active { border-color: var(--accent); background: var(--accent-lt); color: var(--accent-dk); }
+
+  /* ── Tables ───────────────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; }
+  thead th { padding: 11px 14px; text-align: left; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); border-bottom: 1.5px solid var(--border); white-space: nowrap; background: var(--bg); }
+  tbody td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody tr:hover { background: var(--accent-lt); }
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 700; background: var(--accent-lt); color: var(--accent-dk); margin: 1px 3px 1px 0; }
+  .badge-muted { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+  .badge-warn { background: var(--warn-lt); color: var(--warn); }
+  .badge-danger { background: var(--danger-lt); color: var(--danger); }
+  .row-actions { display: flex; gap: 6px; }
+  .empty-state { text-align: center; padding: 50px 20px; color: var(--muted); }
+  .empty-state .icon { width: 52px; height: 52px; margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; background: var(--accent-lt); border-radius: 50%; color: var(--accent); font-size: 22px; }
+
+  /* ── Modal ────────────────────────────────────────────────────────── */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.5); backdrop-filter: blur(3px); z-index: 500; display: flex; align-items: center; justify-content: center; padding: 20px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; }
+  .modal.modal-wide { max-width: 920px; }
+  .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--surface); z-index: 2; }
+  .modal-title { font-family: 'DM Serif Display', serif; font-size: 18px; color: var(--ink); }
+  .modal-body { padding: 22px 24px; display: flex; flex-direction: column; gap: 16px; }
+  .modal-footer { padding: 16px 24px 22px; display: flex; justify-content: flex-end; gap: 10px; }
+  .modal-close { width: 30px; height: 30px; border-radius: 8px; border: none; background: var(--bg); color: var(--muted); cursor: pointer; font-size: 15px; }
+
+  /* ── Availability grid (Teacher form) ────────────────────────────── */
+  .avail-grid { display: grid; grid-template-columns: 70px repeat(7, 1fr); gap: 3px; }
+  .avail-grid .hdr { font-size: 10.5px; font-weight: 700; color: var(--muted); text-align: center; padding: 4px 0; }
+  .avail-grid .hourlabel { font-size: 10.5px; color: var(--muted-lt); text-align: right; padding-right: 6px; line-height: 22px; }
+  .avail-cell { height: 22px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); cursor: pointer; transition: background .1s; }
+  .avail-cell:hover { border-color: var(--accent); }
+  .avail-cell.on { background: var(--accent); border-color: var(--accent-dk); }
+
+  /* ── Weekly schedule grid (viewer) ───────────────────────────────── */
+  .sched-grid { display: grid; grid-template-columns: 64px repeat(7, 1fr); gap: 4px; }
+  .sched-grid .hdr { font-size: 11px; font-weight: 700; color: var(--muted); text-align: center; padding: 6px 0; }
+  .sched-grid .hourlabel { font-size: 10.5px; color: var(--muted-lt); text-align: right; padding-right: 6px; line-height: 30px; }
+  .sched-cell { min-height: 30px; border-radius: 5px; background: var(--bg); border: 1px solid var(--border); font-size: 10px; padding: 2px 4px; overflow: hidden; }
+  .sched-cell.class { background: var(--accent-lt); border-color: var(--accent); color: var(--accent-dk); font-weight: 700; }
+  .sched-cell.self-study { background: var(--success-lt); border-color: var(--success); color: var(--success); font-weight: 700; }
+  .sched-cell.free { background: var(--warn-lt); border-color: var(--warn); color: var(--warn); font-weight: 700; }
+
+  .legend { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--text-2); }
+  .legend-dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; margin-right: 5px; vertical-align: -1.5px; }
+
+  .toast-stack { position: fixed; bottom: 22px; right: 22px; display: flex; flex-direction: column; gap: 8px; z-index: 900; }
+  .toast { min-width: 260px; max-width: 360px; padding: 12px 15px; border-radius: 10px; background: var(--surface); color: var(--text-2); border: 1px solid var(--border); box-shadow: var(--shadow-md); font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+  .toast.success { border-left: 3px solid var(--success); }
+  .toast.error { border-left: 3px solid var(--danger); }
+  .toast.info { border-left: 3px solid var(--accent); }
+
+  /* ── Login overlay ────────────────────────────────────────────────── */
+  #loginOverlay { position: fixed; inset: 0; background: var(--bg); z-index: 1000; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 18px; }
+  #loginOverlay.hidden { display: none; }
+  .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: 34px 30px; width: 100%; max-width: 340px; text-align: center; }
+  .login-msg { font-size: 12.5px; margin-top: 12px; min-height: 16px; }
+  .login-msg.show.error { color: var(--danger); }
+  .login-msg.show.info { color: var(--accent-dk); }
+  #appShell { display: none; }
+  #appShell.ready { display: block; }
+
+  .select-search { position: relative; }
+  .select-results { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--surface); border: 1.5px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-md); max-height: 220px; overflow-y: auto; z-index: 50; display: none; }
+  .select-results.open { display: block; }
+  .select-result-item { padding: 9px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .select-result-item:last-child { border-bottom: none; }
+  .select-result-item:hover { background: var(--accent-lt); }
+  .select-result-item .meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+</style>
+</head>
+<body>
+
+<div id="loginOverlay">
+  <div class="login-card">
+    <div class="logo" style="justify-content:center; margin-bottom:16px;">
+      <div class="logo-mark">S</div>
+      <div class="logo-text">Scheduler<small>Enrollment Registry</small></div>
+    </div>
+    <div id="gsiButtonWrap" style="display:flex; justify-content:center;"></div>
+    <div id="loginMsg" class="login-msg"></div>
+    <a href="index.html" class="back-link" style="margin-top:18px; display:inline-flex;">← Back to Registry</a>
+  </div>
+</div>
+
+<div id="appShell">
+  <header class="site-header">
+    <a href="index.html" class="logo">
+      <div class="logo-mark">S</div>
+      <div class="logo-text">Scheduler<small>Teachers &amp; Class Planning</small></div>
+    </a>
+    <div class="header-right">
+      <a href="index.html" class="back-link">← Registry</a>
+      <button class="icon-btn" id="darkToggleBtn" title="Toggle dark mode" onclick="toggleDark()">🌙</button>
+      <div class="user-chip">
+        <img id="userAvatar" src="" alt="">
+        <span id="userEmail"></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="tabs">
+      <button class="tab active" data-tab="teachers" onclick="switchTab('teachers')">👩‍🏫 Teachers</button>
+      <button class="tab" data-tab="builder" onclick="switchTab('builder')">🗓️ Build Schedule</button>
+      <button class="tab" data-tab="view" onclick="switchTab('view')">📋 Weekly View</button>
+    </div>
+
+    <!-- ═══════════ TAB: TEACHERS ═══════════ -->
+    <div class="tab-panel active" id="panel-teachers">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Teacher Records</div>
+            <div class="card-sub">Who can teach what, and how much of their day is bookable.</div>
+          </div>
+          <button class="btn btn-primary" onclick="openTeacherModal()">+ Add Teacher</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th><th>Campus</th><th>Can Teach</th>
+                <th>Max Hrs/Day</th><th>Max Hrs/Wk</th><th>Min Free/Day</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="teachersTbody"></tbody>
+          </table>
+          <div class="empty-state" id="teachersEmpty" style="display:none;">
+            <div class="icon">👩‍🏫</div>
+            <p>No teachers yet. Add one to start building schedules.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ TAB: BUILDER ═══════════ -->
+    <div class="tab-panel" id="panel-builder">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Build a Student's Schedule</div>
+            <div class="card-sub">Matches teachers by course capability + campus, then balances class time with self-study and teacher free time.</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="grid-2" style="align-items:end;">
+            <div class="field select-search">
+              <label>Student</label>
+              <input type="text" id="studentSearchInput" placeholder="Search by name or Student ID…" autocomplete="off" oninput="renderStudentResults()" onfocus="renderStudentResults()">
+              <div class="select-results" id="studentResults"></div>
+            </div>
+            <div class="field">
+              <label>Selected Student</label>
+              <input type="text" id="studentSelectedLabel" disabled placeholder="No student selected">
+            </div>
+          </div>
+
+          <div id="builderConfigArea" style="display:none; margin-top:18px;">
+            <div class="grid-3">
+              <div class="field">
+                <label>Course (from record)</label>
+                <input type="text" id="cfgCourse" disabled>
+              </div>
+              <div class="field">
+                <label>Min self-study hrs/day</label>
+                <input type="number" id="cfgSelfStudy" min="0" max="12" step="0.5" value="1">
+              </div>
+              <div class="field">
+                <label>Target class hrs/week</label>
+                <input type="number" id="cfgTargetHours" min="0" max="40" step="0.5" value="10">
+              </div>
+            </div>
+
+            <div style="margin-top:16px;">
+              <div class="card-sub" style="margin-bottom:8px;">Eligible teachers (can teach <b id="eligCourseLabel">—</b>, same campus)</div>
+              <div class="chip-row" id="eligibleTeachersRow"></div>
+            </div>
+
+            <div class="form-footer" style="margin-top:20px; padding-top:18px; border-top:1px solid var(--border); display:flex; gap:10px; flex-wrap:wrap;">
+              <button class="btn btn-primary" onclick="autoGenerateSchedule()">✨ Auto-Generate Weekly Schedule</button>
+              <button class="btn btn-ghost" onclick="clearBuilderPreview()">Clear Preview</button>
+              <button class="btn btn-ghost" id="saveScheduleBtn" onclick="saveGeneratedSchedule()" disabled>💾 Save Schedule</button>
+            </div>
+
+            <div id="builderPreviewWrap" style="margin-top:20px; display:none;">
+              <div class="legend" style="margin-bottom:10px;">
+                <span><span class="legend-dot" style="background:var(--accent);"></span>Class</span>
+                <span><span class="legend-dot" style="background:var(--success);"></span>Self-study</span>
+              </div>
+              <div id="builderPreviewGrid"></div>
+              <div id="builderPreviewNote" class="field-hint" style="margin-top:10px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ TAB: WEEKLY VIEW ═══════════ -->
+    <div class="tab-panel" id="panel-view">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Weekly View</div>
+            <div class="card-sub">Pick a student or teacher to see their full week.</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="grid-2">
+            <div class="field">
+              <label>View by</label>
+              <select id="viewByType" onchange="viewByTypeChanged()">
+                <option value="student">Student</option>
+                <option value="teacher">Teacher</option>
+              </select>
+            </div>
+            <div class="field">
+              <label id="viewByLabel">Choose a student</label>
+              <select id="viewBySelect" onchange="renderWeeklyView()"></select>
+            </div>
+          </div>
+          <div class="legend" style="margin:18px 0 10px;">
+            <span><span class="legend-dot" style="background:var(--accent);"></span>Class</span>
+            <span><span class="legend-dot" style="background:var(--success);"></span>Self-study</span>
+            <span><span class="legend-dot" style="background:var(--warn);"></span>Free / Break</span>
+          </div>
+          <div id="weeklyViewGrid"></div>
+          <div class="empty-state" id="weeklyViewEmpty">
+            <div class="icon">📋</div>
+            <p>Choose a student or teacher above to see their schedule.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ TEACHER MODAL ═══════════ -->
+<div class="modal-overlay" id="teacherModalOverlay">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <div class="modal-title" id="teacherModalTitle">Add Teacher</div>
+      <button class="modal-close" onclick="closeTeacherModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="t_rowNo">
+      <div class="grid-2">
+        <div class="field">
+          <label>Full Name</label>
+          <input type="text" id="t_fullName" placeholder="e.g. Maria Santos">
+        </div>
+        <div class="field">
+          <label>Campus</label>
+          <select id="t_campus">
+            <option value="">— Select —</option>
+            <option value="CWA-Mabolo">CWA-Mabolo</option>
+            <option value="CWA-USPF">CWA-USPF</option>
+            <option value="CWA-IAU">CWA-IAU</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Can Teach</label>
+        <div class="chip-row" id="t_canTeachRow">
+          <button type="button" class="chip-toggle" data-course="ESL" onclick="toggleCourseChip(this)">ESL</button>
+          <button type="button" class="chip-toggle" data-course="TOEIC" onclick="toggleCourseChip(this)">TOEIC</button>
+          <button type="button" class="chip-toggle" data-course="IELTS" onclick="toggleCourseChip(this)">IELTS</button>
+          <button type="button" class="chip-toggle" data-course="TOEFL" onclick="toggleCourseChip(this)">TOEFL</button>
+        </div>
+        <div class="field-hint">Only checked courses will match this teacher when building schedules.</div>
+      </div>
+
+      <div class="grid-3">
+        <div class="field">
+          <label>Max Hours / Day</label>
+          <input type="number" id="t_maxHoursDay" min="0" max="16" step="0.5" value="6">
+        </div>
+        <div class="field">
+          <label>Max Hours / Week</label>
+          <input type="number" id="t_maxHoursWeek" min="0" max="60" step="0.5" value="25">
+        </div>
+        <div class="field">
+          <label>Min Free Hours / Day</label>
+          <input type="number" id="t_minFreeDay" min="0" max="12" step="0.5" value="1">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Weekly Availability <span style="font-weight:400; color:var(--muted);">(click/drag cells — these are the hours this teacher CAN be booked)</span></label>
+        <div id="availGridWrap"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeTeacherModal()">Cancel</button>
+      <button class="btn btn-danger" id="archiveTeacherBtn" style="display:none;" onclick="archiveTeacherFromModal()">Archive</button>
+      <button class="btn btn-primary" onclick="saveTeacher()">Save Teacher</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// CONFIG — must match index.html
+// ═══════════════════════════════════════════════════════════════════════
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxq7O4an7fkam6XbhaYMoGZJgPJVEdc98BpxxacENwOKc-jcKv4EJO__m8ZMB5hEEYF/exec';
+const GOOGLE_CLIENT_ID = '432071525789-eo7tb1b1mlal146lol24nd6il1ccpqjk.apps.googleusercontent.com';
+const COURSE_TYPES = ['ESL', 'TOEIC', 'IELTS', 'TOEFL'];
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const HOUR_START = 7;  // 7 AM
+const HOUR_END   = 20; // 8 PM (exclusive)
+
+let currentIdToken = null;
+let currentUserRole = 'admin';
+
+let allStudents = [];   // from Records (action=get)
+let allTeachers = [];   // from Teachers sheet
+let allScheduleEntries = []; // from Schedule sheet
+
+let selectedStudent = null;
+let builderPreviewEntries = []; // in-memory entries not yet saved
+
+// ── AUTH ─────────────────────────────────────────────────────────────
+function withAuth(url) {
+  const sep = url.includes('?') ? '&' : '?';
+  return url + sep + 'idToken=' + encodeURIComponent(currentIdToken || '');
+}
+function withAuthPayload(payload) {
+  return Object.assign({}, payload, { idToken: currentIdToken });
+}
+function showLoginMsg(text, type) {
+  const el = document.getElementById('loginMsg');
+  el.textContent = text;
+  el.className = 'login-msg show ' + (type || 'info');
+}
+function handleAuthError() {
+  currentIdToken = null;
+  document.getElementById('appShell').classList.remove('ready');
+  document.getElementById('loginOverlay').classList.remove('hidden');
+  showLoginMsg('Your session expired or is not authorized. Please sign in again.', 'error');
+  try { google.accounts.id.disableAutoSelect(); } catch(e) {}
+}
+
+async function handleCredentialResponse(response) {
+  currentIdToken = response.credential;
+  let claims = {};
+  try { claims = JSON.parse(atob(response.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); } catch(e) {}
+
+  showLoginMsg('Verifying access…', 'info');
+  document.getElementById('gsiButtonWrap').style.display = 'none';
+
+  let verified = false;
+  try {
+    const res  = await fetch(withAuth(GAS_URL + '?action=get'));
+    const data = await res.json();
+    if (data.status === 'ok') {
+      currentUserRole = data.role || 'admin';
+      if (currentUserRole === 'student') {
+        showLoginMsg("This account is a student account — Scheduler is for staff only.", 'error');
+        document.getElementById('gsiButtonWrap').style.display = '';
+        return;
+      }
+      verified = true;
+      allStudents = data.records || [];
+    } else if (data.code === 401) {
+      showLoginMsg("This account isn't authorized for staff access.", 'error');
+    } else {
+      showLoginMsg('Connection error. Please try again.', 'error');
+    }
+  } catch (e) {
+    showLoginMsg('Connection error. Please try again.', 'error');
+  }
+
+  document.getElementById('gsiButtonWrap').style.display = '';
+  if (!verified) return;
+
+  document.getElementById('userEmail').textContent = claims.email || '';
+  document.getElementById('userAvatar').src = claims.picture || '';
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.getElementById('appShell').classList.add('ready');
+
+  await loadTeachers();
+  await loadSchedule();
+  renderTeachersTable();
+  populateViewBySelect();
+}
+
+window.onload = function() {
+  try {
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
+    google.accounts.id.renderButton(document.getElementById('gsiButtonWrap'), { theme: 'outline', size: 'large', shape: 'pill' });
+    google.accounts.id.prompt();
+  } catch (e) { showLoginMsg('Could not load Google Sign-In.', 'error'); }
+  applySavedDark();
+};
+
+// ── DARK MODE (simple, own key so it doesn't collide with index.html's richer theme system) ──
+function applySavedDark() {
+  if (localStorage.getItem('enreg_themeMode') === 'dark') document.body.classList.add('dark');
+}
+function toggleDark() {
+  document.body.classList.toggle('dark');
+  localStorage.setItem('enreg_themeMode', document.body.classList.contains('dark') ? 'dark' : 'light');
+}
+
+// ── TOASTS ───────────────────────────────────────────────────────────
+function toast(msg, type) {
+  const stack = document.getElementById('toastStack');
+  const el = document.createElement('div');
+  el.className = 'toast ' + (type || 'info');
+  el.textContent = msg;
+  stack.appendChild(el);
+  setTimeout(() => el.remove(), 3800);
+}
+
+// ── TABS ─────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+  if (name === 'view') renderWeeklyView();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TEACHERS
+// ═══════════════════════════════════════════════════════════════════════
+async function loadTeachers() {
+  try {
+    const res = await fetch(withAuth(GAS_URL + '?action=getTeachers'));
+    const data = await res.json();
+    if (data.status === 'ok') {
+      allTeachers = data.teachers.filter(t => !t.archived);
+    } else if (data.code === 401) { handleAuthError(); }
+  } catch (e) { toast('Could not load teachers.', 'error'); }
+}
+
+function renderTeachersTable() {
+  const tbody = document.getElementById('teachersTbody');
+  const empty = document.getElementById('teachersEmpty');
+  tbody.innerHTML = '';
+  if (!allTeachers.length) { empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  allTeachers.forEach(t => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><b>${escapeHtml(t.fullName)}</b></td>
+      <td>${escapeHtml(t.campus || '—')}</td>
+      <td>${(t.canTeach || []).map(c => `<span class="badge">${c}</span>`).join('') || '<span class="badge-muted badge">none</span>'}</td>
+      <td>${t.maxHoursPerDay || 0}h</td>
+      <td>${t.maxHoursPerWeek || 0}h</td>
+      <td>${t.minFreeHoursPerDay || 0}h</td>
+      <td class="row-actions"><button class="btn btn-ghost btn-sm" onclick="openTeacherModal(${t.rowNo})">Edit</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+let currentAvailability = []; // [{day, start, end}] while modal is open
+let availSelecting = false, availSelectOn = true;
+
+function buildAvailGrid() {
+  const wrap = document.getElementById('availGridWrap');
+  const hours = HOUR_END - HOUR_START;
+  let html = '<div class="avail-grid">';
+  html += '<div></div>';
+  DAY_NAMES.forEach(d => html += `<div class="hdr">${d}</div>`);
+  for (let h = HOUR_START; h < HOUR_END; h++) {
+    html += `<div class="hourlabel">${fmtHour(h)}</div>`;
+    for (let d = 0; d < 7; d++) {
+      html += `<div class="avail-cell" data-day="${d}" data-hour="${h}" onmousedown="availCellDown(this)" onmouseenter="availCellEnter(this)"></div>`;
+    }
+  }
+  html += '</div>';
+  wrap.innerHTML = html;
+  document.onmouseup = () => availSelecting = false;
+  paintAvailFromRanges();
+}
+function fmtHour(h) {
+  const ampm = h < 12 ? 'AM' : 'PM';
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return hh + (h % 1 === 0 ? '' : ':30') + ampm;
+}
+function availCellDown(el) {
+  availSelecting = true;
+  availSelectOn = !el.classList.contains('on');
+  el.classList.toggle('on', availSelectOn);
+}
+function availCellEnter(el) {
+  if (!availSelecting) return;
+  el.classList.toggle('on', availSelectOn);
+}
+function paintAvailFromRanges() {
+  document.querySelectorAll('.avail-cell').forEach(c => c.classList.remove('on'));
+  currentAvailability.forEach(r => {
+    const startH = parseInt(r.start.split(':')[0], 10);
+    const endH = parseInt(r.end.split(':')[0], 10);
+    for (let h = startH; h < endH; h++) {
+      const cell = document.querySelector(`.avail-cell[data-day="${r.day}"][data-hour="${h}"]`);
+      if (cell) cell.classList.add('on');
+    }
+  });
+}
+function gridToRanges() {
+  const ranges = [];
+  for (let d = 0; d < 7; d++) {
+    let blockStart = null;
+    for (let h = HOUR_START; h <= HOUR_END; h++) {
+      const cell = h < HOUR_END ? document.querySelector(`.avail-cell[data-day="${d}"][data-hour="${h}"]`) : null;
+      const on = cell && cell.classList.contains('on');
+      if (on && blockStart === null) blockStart = h;
+      if (!on && blockStart !== null) {
+        ranges.push({ day: d, start: pad(blockStart) + ':00', end: pad(h) + ':00' });
+        blockStart = null;
+      }
+    }
+  }
+  return ranges;
+}
+function pad(n) { return n.toString().padStart(2, '0'); }
+
+function toggleCourseChip(btn) { btn.classList.toggle('active'); }
+
+function openTeacherModal(rowNo) {
+  document.getElementById('t_rowNo').value = rowNo || '';
+  document.getElementById('archiveTeacherBtn').style.display = rowNo ? '' : 'none';
+  document.querySelectorAll('#t_canTeachRow .chip-toggle').forEach(c => c.classList.remove('active'));
+  currentAvailability = [];
+
+  if (rowNo) {
+    const t = allTeachers.find(x => x.rowNo === rowNo);
+    document.getElementById('teacherModalTitle').textContent = 'Edit Teacher';
+    document.getElementById('t_fullName').value = t.fullName || '';
+    document.getElementById('t_campus').value = t.campus || '';
+    document.getElementById('t_maxHoursDay').value = t.maxHoursPerDay || 6;
+    document.getElementById('t_maxHoursWeek').value = t.maxHoursPerWeek || 25;
+    document.getElementById('t_minFreeDay').value = t.minFreeHoursPerDay || 1;
+    (t.canTeach || []).forEach(c => {
+      const chip = document.querySelector(`#t_canTeachRow .chip-toggle[data-course="${c}"]`);
+      if (chip) chip.classList.add('active');
+    });
+    currentAvailability = t.availability || [];
+  } else {
+    document.getElementById('teacherModalTitle').textContent = 'Add Teacher';
+    document.getElementById('t_fullName').value = '';
+    document.getElementById('t_campus').value = '';
+    document.getElementById('t_maxHoursDay').value = 6;
+    document.getElementById('t_maxHoursWeek').value = 25;
+    document.getElementById('t_minFreeDay').value = 1;
+  }
+  buildAvailGrid();
+  document.getElementById('teacherModalOverlay').classList.add('open');
+}
+function closeTeacherModal() {
+  document.getElementById('teacherModalOverlay').classList.remove('open');
+}
+
+async function saveTeacher() {
+  const rowNo = document.getElementById('t_rowNo').value;
+  const fullName = document.getElementById('t_fullName').value.trim();
+  if (!fullName) { toast('Please enter the teacher\'s name.', 'error'); return; }
+  const canTeach = Array.from(document.querySelectorAll('#t_canTeachRow .chip-toggle.active')).map(c => c.dataset.course);
+  const payload = {
+    action: rowNo ? 'editTeacher' : 'addTeacher',
+    rowNo: rowNo || undefined,
+    fullName,
+    campus: document.getElementById('t_campus').value,
+    canTeach,
+    maxHoursPerDay: parseFloat(document.getElementById('t_maxHoursDay').value) || 0,
+    maxHoursPerWeek: parseFloat(document.getElementById('t_maxHoursWeek').value) || 0,
+    minFreeHoursPerDay: parseFloat(document.getElementById('t_minFreeDay').value) || 0,
+    availability: gridToRanges(),
+  };
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload(payload)) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      toast('Teacher saved.', 'success');
+      closeTeacherModal();
+      await loadTeachers();
+      renderTeachersTable();
+      populateViewBySelect();
+    } else {
+      toast(data.message || 'Could not save teacher.', 'error');
+    }
+  } catch (e) { toast('Connection error.', 'error'); }
+}
+
+async function archiveTeacherFromModal() {
+  const rowNo = document.getElementById('t_rowNo').value;
+  if (!rowNo) return;
+  if (!confirm('Archive this teacher? They will no longer appear in schedule matching.')) return;
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload({ action: 'archiveTeacher', rowNo, archived: true })) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      toast('Teacher archived.', 'success');
+      closeTeacherModal();
+      await loadTeachers();
+      renderTeachersTable();
+    } else { toast(data.message || 'Could not archive.', 'error'); }
+  } catch (e) { toast('Connection error.', 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SCHEDULE (load all)
+// ═══════════════════════════════════════════════════════════════════════
+async function loadSchedule() {
+  try {
+    const res = await fetch(withAuth(GAS_URL + '?action=getSchedule'));
+    const data = await res.json();
+    if (data.status === 'ok') allScheduleEntries = data.entries;
+  } catch (e) { toast('Could not load schedule.', 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BUILDER — student search + eligible teachers + auto-generate
+// ═══════════════════════════════════════════════════════════════════════
+function renderStudentResults() {
+  const q = document.getElementById('studentSearchInput').value.trim().toLowerCase();
+  const box = document.getElementById('studentResults');
+  if (!q) { box.classList.remove('open'); box.innerHTML = ''; return; }
+  const matches = allStudents.filter(s => !s.archived && (
+    (s.fullName || '').toLowerCase().includes(q) || (s.studentId || '').toString().toLowerCase().includes(q)
+  )).slice(0, 12);
+  if (!matches.length) { box.innerHTML = '<div class="select-result-item">No matches.</div>'; box.classList.add('open'); return; }
+  box.innerHTML = matches.map(s => `
+    <div class="select-result-item" onclick='selectStudent(${s.rowNo})'>
+      <div>${escapeHtml(s.fullName)}</div>
+      <div class="meta">ID ${escapeHtml(s.studentId)} · ${escapeHtml(s.course || '—')} · ${escapeHtml(s.campus || '—')}</div>
+    </div>
+  `).join('');
+  box.classList.add('open');
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.select-search')) document.getElementById('studentResults').classList.remove('open');
+});
+
+function selectStudent(rowNo) {
+  selectedStudent = allStudents.find(s => s.rowNo === rowNo);
+  document.getElementById('studentSearchInput').value = '';
+  document.getElementById('studentResults').classList.remove('open');
+  document.getElementById('studentSelectedLabel').value = `${selectedStudent.fullName} (ID ${selectedStudent.studentId})`;
+  document.getElementById('cfgCourse').value = selectedStudent.course || '';
+  document.getElementById('eligCourseLabel').textContent = normalizeCourse(selectedStudent.course) || '(unspecified)';
+  document.getElementById('builderConfigArea').style.display = '';
+  clearBuilderPreview();
+  renderEligibleTeachers();
+}
+
+function normalizeCourse(course) {
+  const c = (course || '').toUpperCase();
+  return COURSE_TYPES.find(ct => c.includes(ct)) || '';
+}
+
+function eligibleTeachersFor(student) {
+  const courseKey = normalizeCourse(student.course);
+  return allTeachers.filter(t =>
+    (t.canTeach || []).includes(courseKey) &&
+    (!student.campus || !t.campus || t.campus === student.campus)
+  );
+}
+
+function renderEligibleTeachers() {
+  const row = document.getElementById('eligibleTeachersRow');
+  const teachers = eligibleTeachersFor(selectedStudent);
+  if (!teachers.length) {
+    row.innerHTML = '<span class="badge badge-danger">No matching teacher found for this course/campus — add or edit a teacher first.</span>';
+    return;
+  }
+  row.innerHTML = teachers.map(t => `<span class="badge">${escapeHtml(t.fullName)} · ${escapeHtml(t.campus || 'any campus')}</span>`).join('');
+}
+
+function clearBuilderPreview() {
+  builderPreviewEntries = [];
+  document.getElementById('builderPreviewWrap').style.display = 'none';
+  document.getElementById('saveScheduleBtn').disabled = true;
+}
+
+// Weekly hours a teacher already has booked across ALL students (from saved schedule)
+function teacherBookedHoursPerDay(teacherRowNo, day) {
+  return allScheduleEntries
+    .filter(e => e.teacherRowNo == teacherRowNo && e.day === day && e.entryType === 'class')
+    .reduce((sum, e) => sum + hoursBetween(e.startTime, e.endTime), 0);
+}
+function teacherBookedHoursPerWeek(teacherRowNo) {
+  return allScheduleEntries
+    .filter(e => e.teacherRowNo == teacherRowNo && e.entryType === 'class')
+    .reduce((sum, e) => sum + hoursBetween(e.startTime, e.endTime), 0);
+}
+function hoursBetween(start, end) {
+  const [sh] = start.split(':').map(Number);
+  const [eh] = end.split(':').map(Number);
+  return eh - sh;
+}
+
+// Core matching/balancing algorithm — runs entirely client-side, only
+// touches allScheduleEntries in memory until "Save Schedule" is clicked.
+function autoGenerateSchedule() {
+  if (!selectedStudent) { toast('Select a student first.', 'error'); return; }
+  const teachers = eligibleTeachersFor(selectedStudent);
+  if (!teachers.length) { toast('No eligible teacher for this course/campus.', 'error'); return; }
+
+  const targetWeeklyHours = parseFloat(document.getElementById('cfgTargetHours').value) || 0;
+  const minSelfStudyPerDay = parseFloat(document.getElementById('cfgSelfStudy').value) || 0;
+
+  const entries = [];
+  let weeklyBooked = 0;
+
+  for (let day = 0; day < 7 && weeklyBooked < targetWeeklyHours; day++) {
+    let dayBooked = 0;
+    // try each eligible teacher's availability blocks on this day, in order
+    for (const t of teachers) {
+      if (weeklyBooked >= targetWeeklyHours) break;
+      const teacherWeekBooked = teacherBookedHoursPerWeek(t.rowNo) + entries.filter(e => e.teacherRowNo === t.rowNo).reduce((s,e)=>s+hoursBetween(e.startTime,e.endTime),0);
+      if (teacherWeekBooked >= t.maxHoursPerWeek) continue;
+
+      const teacherDayBooked = teacherBookedHoursPerDay(t.rowNo, day) + entries.filter(e => e.teacherRowNo === t.rowNo && e.day === day).reduce((s,e)=>s+hoursBetween(e.startTime,e.endTime),0);
+      const teacherDayRoom = Math.max(0, t.maxHoursPerDay - t.minFreeHoursPerDay - teacherDayBooked);
+      if (teacherDayRoom <= 0) continue;
+
+      const blocks = (t.availability || []).filter(b => b.day === day);
+      for (const block of blocks) {
+        if (weeklyBooked >= targetWeeklyHours) break;
+        const blockHours = hoursBetween(block.start, block.end);
+        // leave room for this student's own self-study minimum that day
+        const roomForClassToday = Math.max(0, (HOUR_END - HOUR_START) - dayBooked - minSelfStudyPerDay);
+        const usable = Math.min(blockHours, teacherDayRoom, targetWeeklyHours - weeklyBooked, roomForClassToday);
+        if (usable <= 0) continue;
+
+        const [sh] = block.start.split(':').map(Number);
+        entries.push({
+          studentRowNo: selectedStudent.rowNo, studentId: selectedStudent.studentId, studentName: selectedStudent.fullName,
+          teacherRowNo: t.rowNo, teacherName: t.fullName, course: normalizeCourse(selectedStudent.course),
+          day, startTime: pad(sh) + ':00', endTime: pad(sh + usable) + ':00',
+          entryType: 'class', campus: selectedStudent.campus || t.campus || '',
+        });
+        dayBooked += usable;
+        weeklyBooked += usable;
+        break; // one block per teacher per day keeps this readable; loop moves to next teacher/day
+      }
+    }
+    // Reserve the student's self-study minimum for the day, if there's room and it's a day with any class
+    if (dayBooked > 0 && minSelfStudyPerDay > 0) {
+      const startH = HOUR_START + Math.ceil(dayBooked);
+      if (startH + minSelfStudyPerDay <= HOUR_END) {
+        entries.push({
+          studentRowNo: selectedStudent.rowNo, studentId: selectedStudent.studentId, studentName: selectedStudent.fullName,
+          teacherRowNo: '', teacherName: '', course: normalizeCourse(selectedStudent.course),
+          day, startTime: pad(startH) + ':00', endTime: pad(startH + minSelfStudyPerDay) + ':00',
+          entryType: 'self-study', campus: selectedStudent.campus || '',
+        });
+      }
+    }
+  }
+
+  builderPreviewEntries = entries;
+  renderBuilderPreview(weeklyBooked, targetWeeklyHours);
+  document.getElementById('saveScheduleBtn').disabled = entries.length === 0;
+}
+
+function renderBuilderPreview(weeklyBooked, targetWeeklyHours) {
+  const wrap = document.getElementById('builderPreviewWrap');
+  wrap.style.display = '';
+  document.getElementById('builderPreviewGrid').innerHTML = buildWeekGridHtml(builderPreviewEntries);
+  const note = document.getElementById('builderPreviewNote');
+  if (!builderPreviewEntries.length) {
+    note.textContent = 'No slots could be scheduled — check teacher availability and campus/course match.';
+  } else {
+    note.textContent = `Scheduled ${weeklyBooked.toFixed(1)}h of ${targetWeeklyHours}h target class time this week, plus self-study blocks. Review below, then Save.`;
+  }
+}
+
+async function saveGeneratedSchedule() {
+  if (!builderPreviewEntries.length || !selectedStudent) return;
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload({
+      action: 'saveScheduleEntries',
+      entries: builderPreviewEntries,
+      replaceForStudentRowNo: selectedStudent.rowNo,
+    })) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      toast(`Saved ${data.added} schedule entries.`, 'success');
+      await loadSchedule();
+      clearBuilderPreview();
+      populateViewBySelect();
+    } else { toast(data.message || 'Could not save schedule.', 'error'); }
+  } catch (e) { toast('Connection error.', 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// WEEKLY VIEW (saved schedule, per student or teacher)
+// ═══════════════════════════════════════════════════════════════════════
+function populateViewBySelect() {
+  viewByTypeChanged();
+}
+function viewByTypeChanged() {
+  const type = document.getElementById('viewByType').value;
+  const sel = document.getElementById('viewBySelect');
+  document.getElementById('viewByLabel').textContent = type === 'student' ? 'Choose a student' : 'Choose a teacher';
+  if (type === 'student') {
+    sel.innerHTML = '<option value="">— Select —</option>' + allStudents.filter(s => !s.archived).map(s => `<option value="${s.rowNo}">${escapeHtml(s.fullName)} (ID ${escapeHtml(s.studentId)})</option>`).join('');
+  } else {
+    sel.innerHTML = '<option value="">— Select —</option>' + allTeachers.map(t => `<option value="${t.rowNo}">${escapeHtml(t.fullName)}</option>`).join('');
+  }
+  document.getElementById('weeklyViewGrid').innerHTML = '';
+  document.getElementById('weeklyViewEmpty').style.display = '';
+}
+function renderWeeklyView() {
+  const type = document.getElementById('viewByType').value;
+  const rowNo = document.getElementById('viewBySelect').value;
+  const gridEl = document.getElementById('weeklyViewGrid');
+  const emptyEl = document.getElementById('weeklyViewEmpty');
+  if (!rowNo) { gridEl.innerHTML = ''; emptyEl.style.display = ''; return; }
+  emptyEl.style.display = 'none';
+  const entries = allScheduleEntries.filter(e => type === 'student' ? e.studentRowNo == rowNo : e.teacherRowNo == rowNo);
+  gridEl.innerHTML = buildWeekGridHtml(entries, type);
+}
+
+function buildWeekGridHtml(entries, mode) {
+  let html = '<div class="sched-grid">';
+  html += '<div></div>';
+  DAY_NAMES.forEach(d => html += `<div class="hdr">${d}</div>`);
+  for (let h = HOUR_START; h < HOUR_END; h++) {
+    html += `<div class="hourlabel">${fmtHour(h)}</div>`;
+    for (let d = 0; d < 7; d++) {
+      const e = entries.find(en => en.day === d && parseInt(en.startTime) <= h && parseInt(en.endTime) > h);
+      if (e) {
+        const label = mode === 'teacher'
+          ? (e.entryType === 'class' ? e.studentName : e.entryType)
+          : (e.entryType === 'class' ? e.teacherName : e.entryType);
+        html += `<div class="sched-cell ${e.entryType}">${escapeHtml(label || e.entryType)}</div>`;
+      } else {
+        html += '<div class="sched-cell"></div>';
+      }
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+// ── util ─────────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+</script>
+</body>
+</html>
