@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Scheduler — Enrollment Registry</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
@@ -165,6 +166,25 @@
   .select-result-item:last-child { border-bottom: none; }
   .select-result-item:hover { background: var(--accent-lt); }
   .select-result-item .meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+  /* ── Print slip ───────────────────────────────────────────────────── */
+  #printSlip { display: none; }
+  @media print {
+    body * { visibility: hidden; }
+    #printSlip, #printSlip * { visibility: visible; }
+    #printSlip { display: block; position: absolute; top: 0; left: 0; width: 100%; padding: 24px; }
+    #printSlip .slip-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #14171F; padding-bottom: 12px; margin-bottom: 18px; }
+    #printSlip .slip-title { font-family: 'DM Serif Display', serif; font-size: 22px; }
+    #printSlip .slip-meta { font-size: 12px; color: #444; margin-top: 3px; }
+    #printSlip table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+    #printSlip th, #printSlip td { border: 1px solid #999; padding: 5px 6px; text-align: center; }
+    #printSlip th { background: #EEE; font-size: 9px; text-transform: uppercase; }
+    #printSlip .slip-hourlabel { text-align: right; font-size: 9px; color: #555; white-space: nowrap; }
+    #printSlip .cell-class { background: #DCE7FB; font-weight: 700; }
+    #printSlip .cell-self-study { background: #DCF3E6; font-weight: 700; }
+    #printSlip .cell-free { background: #FBEBD2; font-weight: 700; }
+    #printSlip .slip-footer { margin-top: 16px; font-size: 10px; color: #666; }
+  }
 </style>
 </head>
 <body>
@@ -302,6 +322,9 @@
             <div class="card-title">Weekly View</div>
             <div class="card-sub">Pick a student or teacher to see their full week.</div>
           </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-ghost btn-sm" onclick="exportAllScheduleToExcel()">⬇ Export All (Excel)</button>
+          </div>
         </div>
         <div class="card-body">
           <div class="grid-2">
@@ -317,10 +340,16 @@
               <select id="viewBySelect" onchange="renderWeeklyView()"></select>
             </div>
           </div>
-          <div class="legend" style="margin:18px 0 10px;">
-            <span><span class="legend-dot" style="background:var(--accent);"></span>Class</span>
-            <span><span class="legend-dot" style="background:var(--success);"></span>Self-study</span>
-            <span><span class="legend-dot" style="background:var(--warn);"></span>Free / Break</span>
+          <div class="legend" style="margin:18px 0 10px; justify-content:space-between;">
+            <div style="display:flex; gap:16px; flex-wrap:wrap;">
+              <span><span class="legend-dot" style="background:var(--accent);"></span>Class</span>
+              <span><span class="legend-dot" style="background:var(--success);"></span>Self-study</span>
+              <span><span class="legend-dot" style="background:var(--warn);"></span>Free / Break</span>
+            </div>
+            <div id="viewExportBtns" style="display:none; gap:8px;">
+              <button class="btn btn-ghost btn-sm" onclick="exportViewToExcel()">⬇ Export This Schedule (Excel)</button>
+              <button class="btn btn-primary btn-sm" onclick="printCurrentSlip()">🖨️ Print / Save as PDF Slip</button>
+            </div>
           </div>
           <div id="weeklyViewGrid"></div>
           <div class="empty-state" id="weeklyViewEmpty">
@@ -329,6 +358,19 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Hidden print-only slip, populated right before window.print() -->
+    <div id="printSlip">
+      <div class="slip-header">
+        <div>
+          <div class="slip-title" id="slipTitle">Weekly Schedule</div>
+          <div class="slip-meta" id="slipMeta"></div>
+        </div>
+        <div class="slip-meta">Generated <span id="slipDate"></span></div>
+      </div>
+      <div id="slipGridWrap"></div>
+      <div class="slip-footer">Enrollment Registry — Scheduler</div>
     </div>
   </div>
 </div>
@@ -441,13 +483,13 @@ function handleAuthError() {
   try { google.accounts.id.disableAutoSelect(); } catch(e) {}
 }
 
-async function handleCredentialResponse(response) {
-  currentIdToken = response.credential;
-  let claims = {};
-  try { claims = JSON.parse(atob(response.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); } catch(e) {}
-
-  showLoginMsg('Verifying access…', 'info');
-  document.getElementById('gsiButtonWrap').style.display = 'none';
+async function verifyAndBoot(idToken, claims, opts) {
+  currentIdToken = idToken;
+  opts = opts || {};
+  if (!opts.silent) {
+    showLoginMsg('Verifying access…', 'info');
+    document.getElementById('gsiButtonWrap').style.display = 'none';
+  }
 
   let verified = false;
   try {
@@ -456,23 +498,21 @@ async function handleCredentialResponse(response) {
     if (data.status === 'ok') {
       currentUserRole = data.role || 'admin';
       if (currentUserRole === 'student') {
-        showLoginMsg("This account is a student account — Scheduler is for staff only.", 'error');
+        if (!opts.silent) showLoginMsg("This account is a student account — Scheduler is for staff only.", 'error');
         document.getElementById('gsiButtonWrap').style.display = '';
-        return;
+        return false;
       }
       verified = true;
       allStudents = data.records || [];
-    } else if (data.code === 401) {
-      showLoginMsg("This account isn't authorized for staff access.", 'error');
-    } else {
-      showLoginMsg('Connection error. Please try again.', 'error');
+    } else if (!opts.silent) {
+      showLoginMsg(data.code === 401 ? "This account isn't authorized for staff access." : 'Connection error. Please try again.', 'error');
     }
   } catch (e) {
-    showLoginMsg('Connection error. Please try again.', 'error');
+    if (!opts.silent) showLoginMsg('Connection error. Please try again.', 'error');
   }
 
   document.getElementById('gsiButtonWrap').style.display = '';
-  if (!verified) return;
+  if (!verified) return false;
 
   document.getElementById('userEmail').textContent = claims.email || '';
   document.getElementById('userAvatar').src = claims.picture || '';
@@ -483,15 +523,43 @@ async function handleCredentialResponse(response) {
   await loadSchedule();
   renderTeachersTable();
   populateViewBySelect();
+  return true;
 }
 
-window.onload = function() {
+function decodeJwtClaims(idToken) {
+  try { return JSON.parse(atob(idToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); }
+  catch (e) { return {}; }
+}
+
+async function handleCredentialResponse(response) {
+  await verifyAndBoot(response.credential, decodeJwtClaims(response.credential));
+}
+
+// Silent handoff from index.html ("Scheduler" button) — reuses the idToken
+// that page already verified, so returning here doesn't ask to sign in
+// again. One-shot: read once, then discard, so a stale/expired token
+// can't be replayed on a later visit — if it fails we just fall back to
+// the normal Google Sign-In button below.
+async function tryHandoffLogin() {
+  const handoffToken = sessionStorage.getItem('schedulerGoogleAuth');
+  if (!handoffToken) return false;
+  sessionStorage.removeItem('schedulerGoogleAuth');
+  const claims = decodeJwtClaims(handoffToken);
+  // A Google idToken is only valid ~1 hour; skip the silent attempt (and
+  // the flash of "Verifying…") if it's already expired.
+  if (!claims.exp || parseInt(claims.exp, 10) * 1000 < Date.now()) return false;
+  return await verifyAndBoot(handoffToken, claims, { silent: true });
+}
+
+window.onload = async function() {
+  applySavedDark();
+  const handedOff = await tryHandoffLogin();
+  if (handedOff) return;
   try {
     google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
     google.accounts.id.renderButton(document.getElementById('gsiButtonWrap'), { theme: 'outline', size: 'large', shape: 'pill' });
     google.accounts.id.prompt();
   } catch (e) { showLoginMsg('Could not load Google Sign-In.', 'error'); }
-  applySavedDark();
 };
 
 // ── DARK MODE (simple, own key so it doesn't collide with index.html's richer theme system) ──
@@ -905,15 +973,35 @@ function viewByTypeChanged() {
   document.getElementById('weeklyViewGrid').innerHTML = '';
   document.getElementById('weeklyViewEmpty').style.display = '';
 }
+let currentViewState = null; // { type, rowNo, name, meta, entries } — used by export/print
+
 function renderWeeklyView() {
   const type = document.getElementById('viewByType').value;
   const rowNo = document.getElementById('viewBySelect').value;
   const gridEl = document.getElementById('weeklyViewGrid');
   const emptyEl = document.getElementById('weeklyViewEmpty');
-  if (!rowNo) { gridEl.innerHTML = ''; emptyEl.style.display = ''; return; }
+  const exportBtns = document.getElementById('viewExportBtns');
+  if (!rowNo) {
+    gridEl.innerHTML = ''; emptyEl.style.display = ''; exportBtns.style.display = 'none';
+    currentViewState = null;
+    return;
+  }
   emptyEl.style.display = 'none';
+  exportBtns.style.display = 'flex';
   const entries = allScheduleEntries.filter(e => type === 'student' ? e.studentRowNo == rowNo : e.teacherRowNo == rowNo);
   gridEl.innerHTML = buildWeekGridHtml(entries, type);
+
+  let name = '', meta = '';
+  if (type === 'student') {
+    const s = allStudents.find(x => x.rowNo == rowNo);
+    name = s ? s.fullName : '';
+    meta = s ? `Student ID ${s.studentId} · ${s.course || '—'} · ${s.campus || '—'}` : '';
+  } else {
+    const t = allTeachers.find(x => x.rowNo == rowNo);
+    name = t ? t.fullName : '';
+    meta = t ? `${(t.canTeach||[]).join(', ') || '—'} · ${t.campus || '—'}` : '';
+  }
+  currentViewState = { type, rowNo, name, meta, entries };
 }
 
 function buildWeekGridHtml(entries, mode) {
@@ -935,6 +1023,89 @@ function buildWeekGridHtml(entries, mode) {
     }
   }
   html += '</div>';
+  return html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EXPORT — Excel (.xlsx) and printable PDF slip
+// ═══════════════════════════════════════════════════════════════════════
+
+// Turns a list of schedule entries into flat rows for a spreadsheet.
+function entriesToSheetRows(entries) {
+  return entries
+    .slice()
+    .sort((a, b) => (a.day - b.day) || (a.startTime < b.startTime ? -1 : 1))
+    .map(e => ({
+      Day: DAY_NAMES[e.day],
+      Start: e.startTime,
+      End: e.endTime,
+      Type: e.entryType,
+      Student: e.studentName || '',
+      'Student ID': e.studentId || '',
+      Teacher: e.teacherName || '',
+      Course: e.course || '',
+      Campus: e.campus || '',
+    }));
+}
+
+// Exports the schedule currently shown in Weekly View (one student or one teacher).
+function exportViewToExcel() {
+  if (!currentViewState || !currentViewState.entries.length) { toast('No schedule to export yet.', 'error'); return; }
+  const rows = entriesToSheetRows(currentViewState.entries);
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:6},{wch:7},{wch:7},{wch:11},{wch:20},{wch:11},{wch:20},{wch:9},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
+  const safeName = (currentViewState.name || 'schedule').replace(/[^\w\- ]/g, '').trim().replace(/\s+/g, '_');
+  XLSX.writeFile(wb, `Schedule_${safeName}.xlsx`);
+}
+
+// Exports every saved schedule entry across all students/teachers, one sheet.
+function exportAllScheduleToExcel() {
+  if (!allScheduleEntries.length) { toast('No schedule entries yet.', 'error'); return; }
+  const rows = entriesToSheetRows(allScheduleEntries);
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:6},{wch:7},{wch:7},{wch:11},{wch:20},{wch:11},{wch:20},{wch:9},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'All Schedules');
+  const stamp = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `All_Schedules_${stamp}.xlsx`);
+}
+
+// Builds the hidden #printSlip content from the current Weekly View selection,
+// then opens the browser print dialog — "Save as PDF" there produces the slip.
+function printCurrentSlip() {
+  if (!currentViewState || !currentViewState.entries.length) { toast('No schedule to print yet.', 'error'); return; }
+  document.getElementById('slipTitle').textContent = currentViewState.name || 'Weekly Schedule';
+  document.getElementById('slipMeta').textContent = currentViewState.meta || '';
+  document.getElementById('slipDate').textContent = new Date().toLocaleDateString();
+  document.getElementById('slipGridWrap').innerHTML = buildSlipTableHtml(currentViewState.entries, currentViewState.type);
+  window.print();
+}
+
+// A plain <table> version of the weekly grid (print CSS doesn't reliably
+// keep CSS grid layouts intact across browsers' print engines, so the
+// printable slip uses a regular table instead of .sched-grid).
+function buildSlipTableHtml(entries, mode) {
+  let html = '<table><thead><tr><th></th>';
+  DAY_NAMES.forEach(d => html += `<th>${d}</th>`);
+  html += '</tr></thead><tbody>';
+  for (let h = HOUR_START; h < HOUR_END; h++) {
+    html += `<tr><td class="slip-hourlabel">${fmtHour(h)}</td>`;
+    for (let d = 0; d < 7; d++) {
+      const e = entries.find(en => en.day === d && parseInt(en.startTime) <= h && parseInt(en.endTime) > h);
+      if (e) {
+        const label = mode === 'teacher'
+          ? (e.entryType === 'class' ? e.studentName : e.entryType)
+          : (e.entryType === 'class' ? e.teacherName : e.entryType);
+        html += `<td class="cell-${e.entryType}">${escapeHtml(label || e.entryType)}</td>`;
+      } else {
+        html += '<td></td>';
+      }
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
   return html;
 }
 
