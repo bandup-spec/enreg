@@ -604,7 +604,7 @@
       <span class="btn-icon">✈️</span><span class="btn-label">Arrivals</span>
       <span id="arrivalsBellBadge" style="position:absolute;top:-5px;right:-5px;background:#DC2626;color:#fff;font-size:10px;font-weight:700;line-height:1;padding:3px 5px;border-radius:20px;min-width:16px;text-align:center;display:none;"></span>
     </button>
-    <button class="logout-btn" id="schedulerNavBtn" onclick="window.location.href='scheduler.html'" title="Teachers &amp; Scheduling">
+    <button class="logout-btn" id="schedulerNavBtn" onclick="goToScheduler()" title="Teachers &amp; Scheduling">
       <span class="btn-icon">🗓️</span><span class="btn-label">Scheduler</span>
     </button>
     <div class="user-chip">
@@ -617,7 +617,7 @@
         <button class="header-burger-btn" id="headerBurgerBtn" onclick="toggleHeaderMenu(event)" title="Menu" aria-label="Menu">☰</button>
         <div class="header-burger-menu" id="headerBurgerMenu">
           <button class="header-burger-item" id="headerBurgerArrivalsItem" onclick="closeHeaderMenu();openArrivalsModal()"><span class="btn-icon">✈️</span> Arrivals <span id="headerBurgerArrivalsBadge" style="margin-left:auto;background:#DC2626;color:#fff;font-size:10px;font-weight:700;line-height:1;padding:3px 6px;border-radius:20px;display:none;"></span></button>
-          <button class="header-burger-item" id="headerBurgerSchedulerItem" onclick="closeHeaderMenu();window.location.href='scheduler.html'"><span class="btn-icon">🗓️</span> Scheduler</button>
+          <button class="header-burger-item" id="headerBurgerSchedulerItem" onclick="closeHeaderMenu();goToScheduler()"><span class="btn-icon">🗓️</span> Scheduler</button>
           <button class="header-burger-item" onclick="closeHeaderMenu();openMyAccountModal()"><span class="btn-icon">👤</span> Profile</button>
           <button class="header-burger-item" onclick="closeHeaderMenu();openSettingsModal()"><span class="btn-icon">⚙</span> Settings</button>
           <button class="header-burger-item danger" onclick="closeHeaderMenu();handleLogout()"><span class="btn-icon">⇥</span> Sign out</button>
@@ -1878,6 +1878,13 @@ function closeMyAccountModal() {
 function goToStudentHub() {
   sessionStorage.setItem('studentGoogleAuth', currentIdToken);
   window.location.href = 'profile.html';
+}
+// Same silent handoff, for staff jumping to the Scheduler — avoids a second
+// Google Sign-In prompt since scheduler.html reads this on load and, if
+// still valid, signs the user straight in.
+function goToScheduler() {
+  sessionStorage.setItem('schedulerGoogleAuth', currentIdToken);
+  window.location.href = 'scheduler.html';
 }
 
 // ── SETTINGS MODAL (dark mode + rows per page) ──────────────────────────
