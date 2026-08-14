@@ -604,6 +604,9 @@
       <span class="btn-icon">✈️</span><span class="btn-label">Arrivals</span>
       <span id="arrivalsBellBadge" style="position:absolute;top:-5px;right:-5px;background:#DC2626;color:#fff;font-size:10px;font-weight:700;line-height:1;padding:3px 5px;border-radius:20px;min-width:16px;text-align:center;display:none;"></span>
     </button>
+    <button class="logout-btn" id="schedulerNavBtn" onclick="window.location.href='scheduler.html'" title="Teachers &amp; Scheduling">
+      <span class="btn-icon">🗓️</span><span class="btn-label">Scheduler</span>
+    </button>
     <div class="user-chip">
       <img class="user-avatar" id="userAvatar" src="" alt="">
       <span class="user-email" id="userEmail"></span>
@@ -1599,6 +1602,8 @@ function applyRolePermissions() {
   if (activityItem) activityItem.style.display = (isEncoder() || isStudent()) ? 'none' : '';
   const schedulerItem = document.getElementById('headerBurgerSchedulerItem');
   if (schedulerItem) schedulerItem.style.display = isStudent() ? 'none' : '';
+  const schedulerNavBtn = document.getElementById('schedulerNavBtn');
+  if (schedulerNavBtn) schedulerNavBtn.style.display = isStudent() ? 'none' : '';
   if (isStudent()) {
     // Nothing to add/import as a student — land straight on Records,
     // which (per the backend) will only ever contain their own row.
