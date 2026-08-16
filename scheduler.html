@@ -232,7 +232,10 @@
             <div class="card-title">Teacher Records</div>
             <div class="card-sub">Who can teach what, and how much of their day is bookable.</div>
           </div>
-          <button class="btn btn-primary" onclick="openTeacherModal()">+ Add Teacher</button>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-ghost" onclick="openBulkImportModal()">⬆ Bulk Import</button>
+            <button class="btn btn-primary" onclick="openTeacherModal()">+ Add Teacher</button>
+          </div>
         </div>
         <div class="card-body" style="padding:0;">
           <table>
@@ -435,6 +438,44 @@
       <button class="btn btn-ghost" onclick="closeTeacherModal()">Cancel</button>
       <button class="btn btn-danger" id="archiveTeacherBtn" style="display:none;" onclick="archiveTeacherFromModal()">Archive</button>
       <button class="btn btn-primary" onclick="saveTeacher()">Save Teacher</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ BULK IMPORT TEACHERS MODAL ═══════════ -->
+<div class="modal-overlay" id="bulkImportModalOverlay">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <div class="modal-title">Bulk Import Teachers</div>
+      <button class="modal-close" onclick="closeBulkImportModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Upload a .xlsx or .csv file</label>
+        <input type="file" id="bulkImportFile" accept=".xlsx,.xls,.csv" onchange="handleBulkImportFile(event)">
+        <div class="field-hint">
+          Expected columns (header names, any order): <b>Full Name</b>, <b>Campus</b>, <b>Can Teach</b> (e.g. "ESL, TOEIC"),
+          <b>Max Hours/Day</b>, <b>Max Hours/Week</b>, <b>Min Free Hours/Day</b>. Weekly availability isn't imported —
+          set each teacher's time blocks afterward via Edit.
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="width:fit-content;" onclick="downloadTeacherImportTemplate()">⬇ Download blank template (.xlsx)</button>
+
+      <div id="bulkImportPreviewWrap" style="display:none;">
+        <div class="card-sub" style="margin:6px 0 8px;">Preview — <span id="bulkImportCount">0</span> teacher(s) found. Review before importing.</div>
+        <div style="max-height:320px; overflow-y:auto; border:1px solid var(--border); border-radius:8px;">
+          <table>
+            <thead>
+              <tr><th>Full Name</th><th>Campus</th><th>Can Teach</th><th>Max/Day</th><th>Max/Wk</th><th>Min Free/Day</th></tr>
+            </thead>
+            <tbody id="bulkImportPreviewTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeBulkImportModal()">Cancel</button>
+      <button class="btn btn-primary" id="bulkImportConfirmBtn" onclick="confirmBulkImportTeachers()" disabled>Import Teachers</button>
     </div>
   </div>
 </div>
@@ -766,6 +807,134 @@ async function archiveTeacherFromModal() {
       renderTeachersTable();
     } else { toast(data.message || 'Could not archive.', 'error'); }
   } catch (e) { toast('Connection error.', 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BULK IMPORT TEACHERS
+// ═══════════════════════════════════════════════════════════════════════
+let bulkImportRows = []; // parsed + validated rows, ready to POST
+
+function openBulkImportModal() {
+  bulkImportRows = [];
+  document.getElementById('bulkImportFile').value = '';
+  document.getElementById('bulkImportPreviewWrap').style.display = 'none';
+  document.getElementById('bulkImportConfirmBtn').disabled = true;
+  document.getElementById('bulkImportModalOverlay').classList.add('open');
+}
+function closeBulkImportModal() {
+  document.getElementById('bulkImportModalOverlay').classList.remove('open');
+}
+
+function downloadTeacherImportTemplate() {
+  const ws = XLSX.utils.json_to_sheet([
+    { 'Full Name': 'Juan Dela Cruz', 'Campus': 'CWA-Mabolo', 'Can Teach': 'ESL, TOEIC', 'Max Hours/Day': 6, 'Max Hours/Week': 25, 'Min Free Hours/Day': 1 },
+  ]);
+  ws['!cols'] = [{wch:20},{wch:14},{wch:18},{wch:13},{wch:14},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Teachers');
+  XLSX.writeFile(wb, 'Teacher_Import_Template.xlsx');
+}
+
+// Reads the header row loosely — matches by lowercased/trimmed column name
+// so "Max Hours / Day", "max hours/day", etc. all still work.
+function findCol(headerRow, ...candidates) {
+  const norm = s => (s || '').toString().toLowerCase().replace(/[^a-z]/g, '');
+  const idx = headerRow.findIndex(h => candidates.some(c => norm(h) === norm(c)));
+  return idx;
+}
+
+function handleBulkImportFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (!rows.length) { toast('That file looks empty.', 'error'); return; }
+
+      const header = rows[0];
+      const iName    = findCol(header, 'Full Name', 'Name', 'Teacher Name');
+      const iCampus  = findCol(header, 'Campus');
+      const iCourses = findCol(header, 'Can Teach', 'Courses', 'CanTeach');
+      const iMaxDay  = findCol(header, 'Max Hours/Day', 'Max Hours Per Day', 'MaxHoursDay');
+      const iMaxWeek = findCol(header, 'Max Hours/Week', 'Max Hours Per Week', 'MaxHoursWeek');
+      const iMinFree = findCol(header, 'Min Free Hours/Day', 'Min Free Hours Per Day', 'MinFreeHoursDay');
+
+      if (iName === -1) {
+        toast('Could not find a "Full Name" column in that file.', 'error');
+        return;
+      }
+
+      const parsed = [];
+      for (let r = 1; r < rows.length; r++) {
+        const row = rows[r];
+        const fullName = (row[iName] || '').toString().trim();
+        if (!fullName) continue;
+        const canTeachRaw = iCourses !== -1 ? (row[iCourses] || '').toString() : '';
+        const canTeach = canTeachRaw.split(/[,/|]/).map(s => s.trim().toUpperCase()).filter(c => COURSE_TYPES.includes(c));
+        parsed.push({
+          fullName,
+          campus: iCampus !== -1 ? (row[iCampus] || '').toString().trim() : '',
+          canTeach,
+          maxHoursPerDay: iMaxDay !== -1 ? (parseFloat(row[iMaxDay]) || 0) : 6,
+          maxHoursPerWeek: iMaxWeek !== -1 ? (parseFloat(row[iMaxWeek]) || 0) : 25,
+          minFreeHoursPerDay: iMinFree !== -1 ? (parseFloat(row[iMinFree]) || 0) : 1,
+        });
+      }
+
+      if (!parsed.length) { toast('No valid rows found (need at least a Full Name per row).', 'error'); return; }
+      bulkImportRows = parsed;
+      renderBulkImportPreview();
+    } catch (err) {
+      toast('Could not read that file. Make sure it\'s a valid .xlsx or .csv.', 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderBulkImportPreview() {
+  document.getElementById('bulkImportCount').textContent = bulkImportRows.length;
+  document.getElementById('bulkImportPreviewTbody').innerHTML = bulkImportRows.map(r => `
+    <tr>
+      <td><b>${escapeHtml(r.fullName)}</b></td>
+      <td>${escapeHtml(r.campus || '—')}</td>
+      <td>${r.canTeach.length ? r.canTeach.map(c => `<span class="badge">${c}</span>`).join('') : '<span class="badge badge-warn">none set</span>'}</td>
+      <td>${r.maxHoursPerDay}h</td>
+      <td>${r.maxHoursPerWeek}h</td>
+      <td>${r.minFreeHoursPerDay}h</td>
+    </tr>
+  `).join('');
+  document.getElementById('bulkImportPreviewWrap').style.display = '';
+  document.getElementById('bulkImportConfirmBtn').disabled = false;
+}
+
+async function confirmBulkImportTeachers() {
+  if (!bulkImportRows.length) return;
+  const btn = document.getElementById('bulkImportConfirmBtn');
+  btn.disabled = true;
+  btn.textContent = 'Importing…';
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload({
+      action: 'bulkImportTeachers', rows: bulkImportRows,
+    })) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      toast(`Imported ${data.added} teacher(s). Set each one's availability via Edit.`, 'success');
+      closeBulkImportModal();
+      await loadTeachers();
+      renderTeachersTable();
+      populateViewBySelect();
+    } else {
+      toast(data.message || 'Could not import teachers.', 'error');
+    }
+  } catch (e) {
+    toast('Connection error.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Import Teachers';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
