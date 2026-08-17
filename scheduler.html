@@ -521,16 +521,31 @@
       <button class="modal-close" onclick="closeBulkImportModal()">✕</button>
     </div>
     <div class="modal-body">
-      <div class="field">
+      <div class="chip-row">
+        <button type="button" class="chip-toggle active" id="importModePasteBtn" onclick="setImportMode('paste')">📋 Paste rows</button>
+        <button type="button" class="chip-toggle" id="importModeFileBtn" onclick="setImportMode('file')">📁 Upload file</button>
+      </div>
+
+      <div id="importModePasteWrap" class="field">
+        <label>Paste rows copied directly from Google Sheets/Excel (tab-separated)</label>
+        <div class="field-hint" style="margin-bottom:6px;">
+          Column order: <code style="font-size:11px; background:var(--bg); padding:2px 6px; border-radius:4px;">Full Name&nbsp;|&nbsp;Campus&nbsp;|&nbsp;Can Teach&nbsp;|&nbsp;Max Hours/Day&nbsp;|&nbsp;Max Hours/Week&nbsp;|&nbsp;Min Free Hours/Day</code>
+          — for <b>Can Teach</b>, separate multiple courses with a comma inside the cell (e.g. "ESL, TOEIC"). Just select the cells in your sheet, copy, then paste below.
+        </div>
+        <textarea id="bulkImportPasteText" rows="8" style="width:100%; font-family:monospace; font-size:12px; padding:12px; border:1.5px solid var(--border); border-radius:8px; resize:vertical; background:var(--surface); color:var(--text);" placeholder="Paste tab-separated rows here…"></textarea>
+        <button class="btn btn-ghost btn-sm" style="width:fit-content; margin-top:8px;" onclick="handleBulkImportPaste()">Preview Pasted Rows</button>
+      </div>
+
+      <div id="importModeFileWrap" class="field" style="display:none;">
         <label>Upload a .xlsx or .csv file</label>
         <input type="file" id="bulkImportFile" accept=".xlsx,.xls,.csv" onchange="handleBulkImportFile(event)">
         <div class="field-hint">
           Expected columns (header names, any order): <b>Full Name</b>, <b>Campus</b>, <b>Can Teach</b> (e.g. "ESL, TOEIC"),
-          <b>Max Hours/Day</b>, <b>Max Hours/Week</b>, <b>Min Free Hours/Day</b>. Weekly availability isn't imported —
-          set each teacher's time blocks afterward via Edit.
+          <b>Max Hours/Day</b>, <b>Max Hours/Week</b>, <b>Min Free Hours/Day</b>.
         </div>
+        <button class="btn btn-ghost btn-sm" style="width:fit-content; margin-top:8px;" onclick="downloadTeacherImportTemplate()">⬇ Download blank template (.xlsx)</button>
       </div>
-      <button class="btn btn-ghost btn-sm" style="width:fit-content;" onclick="downloadTeacherImportTemplate()">⬇ Download blank template (.xlsx)</button>
+      <div class="field-hint">Weekly availability isn't imported either way — set each teacher's time blocks afterward via Edit.</div>
 
       <div id="bulkImportPreviewWrap" style="display:none;">
         <div class="card-sub" style="margin:6px 0 8px;">Preview — <span id="bulkImportCount">0</span> teacher(s) found. Review before importing.</div>
@@ -1217,12 +1232,80 @@ let bulkImportRows = []; // parsed + validated rows, ready to POST
 function openBulkImportModal() {
   bulkImportRows = [];
   document.getElementById('bulkImportFile').value = '';
+  document.getElementById('bulkImportPasteText').value = '';
   document.getElementById('bulkImportPreviewWrap').style.display = 'none';
   document.getElementById('bulkImportConfirmBtn').disabled = true;
+  setImportMode('paste');
   document.getElementById('bulkImportModalOverlay').classList.add('open');
 }
 function closeBulkImportModal() {
   document.getElementById('bulkImportModalOverlay').classList.remove('open');
+}
+function setImportMode(mode) {
+  document.getElementById('importModePasteBtn').classList.toggle('active', mode === 'paste');
+  document.getElementById('importModeFileBtn').classList.toggle('active', mode === 'file');
+  document.getElementById('importModePasteWrap').style.display = mode === 'paste' ? '' : 'none';
+  document.getElementById('importModeFileWrap').style.display = mode === 'file' ? '' : 'none';
+}
+
+// Tokenizes pasted Google Sheets/Excel data into rows of columns, respecting
+// quoted fields that may contain embedded newlines or tabs — same parser
+// used by the Records bulk import on index.html, so copy/paste behaves
+// identically here.
+function tokenizeTSV(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  let i = 0;
+  const n = text.length;
+
+  while (i < n) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      field += ch; i++; continue;
+    }
+    if (ch === '"' && field === '') { inQuotes = true; i++; continue; }
+    if (ch === '\t') { row.push(field); field = ''; i++; continue; }
+    if (ch === '\r') { i++; continue; }
+    if (ch === '\n') { row.push(field); field = ''; rows.push(row); row = []; i++; continue; }
+    field += ch; i++;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+
+  return rows.map(r => r.map(c => c.trim())).filter(r => r.some(c => c.length));
+}
+
+// Fixed column order (no header row expected — this mirrors pasting
+// straight from a plain data range, same as the Records import).
+function handleBulkImportPaste() {
+  const text = document.getElementById('bulkImportPasteText').value;
+  if (!text.trim()) { toast('Paste some rows first.', 'error'); return; }
+  const rows = tokenizeTSV(text);
+  if (!rows.length) { toast('Could not find any rows in that paste.', 'error'); return; }
+
+  const parsed = [];
+  rows.forEach(cols => {
+    const fullName = (cols[0] || '').trim();
+    if (!fullName) return;
+    const canTeach = (cols[2] || '').split(/[,/|]/).map(s => s.trim().toUpperCase()).filter(c => COURSE_TYPES.includes(c));
+    parsed.push({
+      fullName,
+      campus: (cols[1] || '').trim(),
+      canTeach,
+      maxHoursPerDay: parseFloat(cols[3]) || 6,
+      maxHoursPerWeek: parseFloat(cols[4]) || 25,
+      minFreeHoursPerDay: parseFloat(cols[5]) || 1,
+    });
+  });
+
+  if (!parsed.length) { toast('No valid rows found — first column (Full Name) can\'t be empty.', 'error'); return; }
+  bulkImportRows = parsed;
+  renderBulkImportPreview();
 }
 
 function downloadTeacherImportTemplate() {
