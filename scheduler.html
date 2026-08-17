@@ -220,8 +220,79 @@
   <div class="wrap">
     <div class="tabs">
       <button class="tab active" data-tab="teachers" onclick="switchTab('teachers')">👩‍🏫 Teachers</button>
+      <button class="tab" data-tab="rooms" onclick="switchTab('rooms')">🚪 Rooms</button>
+      <button class="tab" data-tab="courses" onclick="switchTab('courses')">📚 Courses</button>
       <button class="tab" data-tab="builder" onclick="switchTab('builder')">🗓️ Build Schedule</button>
       <button class="tab" data-tab="view" onclick="switchTab('view')">📋 Weekly View</button>
+      <button class="tab" data-tab="settings" onclick="switchTab('settings')">⚙️ Settings</button>
+    </div>
+
+    <!-- ═══════════ TAB: ROOMS ═══════════ -->
+    <div class="tab-panel" id="panel-rooms">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Rooms</div>
+            <div class="card-sub">Rooms live per campus — used when building the schedule and on the Room/GC grid exports.</div>
+          </div>
+          <button class="btn btn-primary" onclick="openRoomModal()">+ Add Room</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <table>
+            <thead><tr><th>Room Name</th><th>Campus</th><th>Type</th><th></th></tr></thead>
+            <tbody id="roomsTbody"></tbody>
+          </table>
+          <div class="empty-state" id="roomsEmpty" style="display:none;">
+            <div class="icon">🚪</div>
+            <p>No rooms yet. Add your first room to start assigning classes to it.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ TAB: COURSES ═══════════ -->
+    <div class="tab-panel" id="panel-courses">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Course Catalog</div>
+            <div class="card-sub">The exact class codes you use (e.g. "ESL GC 3", "STA Listening GC") — these show up when building schedules and on exports.</div>
+          </div>
+          <button class="btn btn-primary" onclick="openCourseModal()">+ Add Course</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <table>
+            <thead><tr><th>Code</th><th>Category</th><th>Description</th><th></th></tr></thead>
+            <tbody id="coursesTbody"></tbody>
+          </table>
+          <div class="empty-state" id="coursesEmpty" style="display:none;">
+            <div class="icon">📚</div>
+            <p>No courses yet. Add your class codes (ESL, TOEIC, IELTS, TOEFL levels, etc.) to use them in the builder.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ TAB: SETTINGS ═══════════ -->
+    <div class="tab-panel" id="panel-settings">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Period Settings</div>
+            <div class="card-sub">The school's daily period schedule — used across the builder, weekly view, and exports. Changes apply school-wide.</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="addPeriodRow()">+ Add Period</button>
+        </div>
+        <div class="card-body">
+          <table>
+            <thead><tr><th>Label</th><th>Start</th><th>End</th><th>Type</th><th></th></tr></thead>
+            <tbody id="periodsTbody"></tbody>
+          </table>
+          <div style="margin-top:16px;">
+            <button class="btn btn-primary" onclick="savePeriodSettings()">💾 Save Period Settings</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ═══════════ TAB: TEACHERS ═══════════ -->
@@ -241,13 +312,14 @@
           <table>
             <thead>
               <tr>
-                <th>Name</th><th>Campus</th><th>Can Teach</th>
+                <th>Name</th><th>Short</th><th>Campus</th><th>Can Teach</th>
                 <th>Max Hrs/Day</th><th>Max Hrs/Wk</th><th>Min Free/Day</th><th></th>
               </tr>
             </thead>
             <tbody id="teachersTbody"></tbody>
           </table>
           <div class="empty-state" id="teachersEmpty" style="display:none;">
+
             <div class="icon">👩‍🏫</div>
             <p>No teachers yet. Add one to start building schedules.</p>
           </div>
@@ -387,19 +459,18 @@
     </div>
     <div class="modal-body">
       <input type="hidden" id="t_rowNo">
-      <div class="grid-2">
+      <div class="grid-3">
         <div class="field">
           <label>Full Name</label>
-          <input type="text" id="t_fullName" placeholder="e.g. Maria Santos">
+          <input type="text" id="t_fullName" placeholder="e.g. Maria Santos" oninput="autoFillShortName()">
+        </div>
+        <div class="field">
+          <label>Short Name <span style="font-weight:400; color:var(--muted);">(for grid displays)</span></label>
+          <input type="text" id="t_shortName" placeholder="e.g. Maria">
         </div>
         <div class="field">
           <label>Campus</label>
-          <select id="t_campus">
-            <option value="">— Select —</option>
-            <option value="CWA-Mabolo">CWA-Mabolo</option>
-            <option value="CWA-USPF">CWA-USPF</option>
-            <option value="CWA-IAU">CWA-IAU</option>
-          </select>
+          <select id="t_campus" class="campus-select"><option value="">— Select —</option></select>
         </div>
       </div>
 
@@ -482,6 +553,79 @@
 
 <div class="toast-stack" id="toastStack"></div>
 
+<!-- ═══════════ ROOM MODAL ═══════════ -->
+<div class="modal-overlay" id="roomModalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="roomModalTitle">Add Room</div>
+      <button class="modal-close" onclick="closeRoomModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="rm_rowNo">
+      <div class="field">
+        <label>Room Name</label>
+        <input type="text" id="rm_roomName" placeholder="e.g. RM1, GC1, Office">
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Campus</label>
+          <select id="rm_campus" class="campus-select"><option value="">— Select —</option></select>
+        </div>
+        <div class="field">
+          <label>Type</label>
+          <select id="rm_type">
+            <option value="Regular">Regular</option>
+            <option value="GC">GC (Group Class)</option>
+            <option value="Office">Office</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeRoomModal()">Cancel</button>
+      <button class="btn btn-danger" id="archiveRoomBtn" style="display:none;" onclick="archiveRoomFromModal()">Archive</button>
+      <button class="btn btn-primary" onclick="saveRoom()">Save Room</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ COURSE MODAL ═══════════ -->
+<div class="modal-overlay" id="courseModalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="courseModalTitle">Add Course</div>
+      <button class="modal-close" onclick="closeCourseModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="c_rowNo">
+      <div class="field">
+        <label>Code</label>
+        <input type="text" id="c_code" placeholder='e.g. "ESL GC 3", "STA Listening GC", "TOEIC GC L"'>
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <select id="c_category">
+          <option value="">— None —</option>
+          <option value="ESL">ESL</option>
+          <option value="TOEIC">TOEIC</option>
+          <option value="IELTS">IELTS</option>
+          <option value="TOEFL">TOEFL</option>
+        </select>
+        <div class="field-hint">Used for matching against a teacher's "Can Teach" list — pick the closest general category.</div>
+      </div>
+      <div class="field">
+        <label>Description <span style="font-weight:400; color:var(--muted);">(optional)</span></label>
+        <input type="text" id="c_description" placeholder="e.g. Speaking practice, small group">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeCourseModal()">Cancel</button>
+      <button class="btn btn-danger" id="archiveCourseBtn" style="display:none;" onclick="archiveCourseFromModal()">Archive</button>
+      <button class="btn btn-primary" onclick="saveCourse()">Save Course</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════════════════
 // CONFIG — must match index.html
@@ -489,6 +633,11 @@
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxq7O4an7fkam6XbhaYMoGZJgPJVEdc98BpxxacENwOKc-jcKv4EJO__m8ZMB5hEEYF/exec';
 const GOOGLE_CLIENT_ID = '432071525789-eo7tb1b1mlal146lol24nd6il1ccpqjk.apps.googleusercontent.com';
 const COURSE_TYPES = ['ESL', 'TOEIC', 'IELTS', 'TOEFL'];
+const CAMPUS_LIST = ['CWA-Mabolo', 'CWA-USPF', 'CWA-IAU']; // must match the backend's CAMPUSES
+
+let allRooms = [];
+let allCourses = [];
+let periodSettings = []; // [{id,label,start,end,type}], loaded from backend / DEFAULT_PERIODS fallback
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const HOUR_START = 7;  // 7 AM
 const HOUR_END   = 20; // 8 PM (exclusive)
@@ -560,11 +709,26 @@ async function verifyAndBoot(idToken, claims, opts) {
   document.getElementById('loginOverlay').classList.add('hidden');
   document.getElementById('appShell').classList.add('ready');
 
+  populateAllCampusSelects();
   await loadTeachers();
   await loadSchedule();
+  await loadRooms();
+  await loadCourses();
+  await loadPeriodSettings();
   renderTeachersTable();
+  renderRoomsTable();
+  renderCoursesTable();
+  renderPeriodsTable();
   populateViewBySelect();
   return true;
+}
+
+function populateAllCampusSelects() {
+  document.querySelectorAll('.campus-select').forEach(sel => {
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— Select —</option>' + CAMPUS_LIST.map(c => `<option value="${c}">${c}</option>`).join('');
+    if (current) sel.value = current;
+  });
 }
 
 function decodeJwtClaims(idToken) {
@@ -652,6 +816,7 @@ function renderTeachersTable() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><b>${escapeHtml(t.fullName)}</b></td>
+      <td>${escapeHtml(t.shortName || '—')}</td>
       <td>${escapeHtml(t.campus || '—')}</td>
       <td>${(t.canTeach || []).map(c => `<span class="badge">${c}</span>`).join('') || '<span class="badge-muted badge">none</span>'}</td>
       <td>${t.maxHoursPerDay || 0}h</td>
@@ -728,16 +893,28 @@ function pad(n) { return n.toString().padStart(2, '0'); }
 
 function toggleCourseChip(btn) { btn.classList.toggle('active'); }
 
+function autoFillShortName() {
+  const shortEl = document.getElementById('t_shortName');
+  if (shortEl.dataset.userEdited === '1') return; // don't clobber a manual edit
+  const first = document.getElementById('t_fullName').value.trim().split(' ')[0] || '';
+  shortEl.value = first;
+}
+
 function openTeacherModal(rowNo) {
   document.getElementById('t_rowNo').value = rowNo || '';
   document.getElementById('archiveTeacherBtn').style.display = rowNo ? '' : 'none';
   document.querySelectorAll('#t_canTeachRow .chip-toggle').forEach(c => c.classList.remove('active'));
   currentAvailability = [];
+  const shortEl = document.getElementById('t_shortName');
+  shortEl.dataset.userEdited = '0';
+  shortEl.oninput = () => { shortEl.dataset.userEdited = '1'; };
 
   if (rowNo) {
     const t = allTeachers.find(x => x.rowNo === rowNo);
     document.getElementById('teacherModalTitle').textContent = 'Edit Teacher';
     document.getElementById('t_fullName').value = t.fullName || '';
+    shortEl.value = t.shortName || '';
+    shortEl.dataset.userEdited = '1'; // existing teacher already has one set — don't auto-overwrite
     document.getElementById('t_campus').value = t.campus || '';
     document.getElementById('t_maxHoursDay').value = t.maxHoursPerDay || 6;
     document.getElementById('t_maxHoursWeek').value = t.maxHoursPerWeek || 25;
@@ -750,6 +927,7 @@ function openTeacherModal(rowNo) {
   } else {
     document.getElementById('teacherModalTitle').textContent = 'Add Teacher';
     document.getElementById('t_fullName').value = '';
+    shortEl.value = '';
     document.getElementById('t_campus').value = '';
     document.getElementById('t_maxHoursDay').value = 6;
     document.getElementById('t_maxHoursWeek').value = 25;
@@ -771,6 +949,7 @@ async function saveTeacher() {
     action: rowNo ? 'editTeacher' : 'addTeacher',
     rowNo: rowNo || undefined,
     fullName,
+    shortName: document.getElementById('t_shortName').value.trim() || fullName.split(' ')[0],
     campus: document.getElementById('t_campus').value,
     canTeach,
     maxHoursPerDay: parseFloat(document.getElementById('t_maxHoursDay').value) || 0,
@@ -806,6 +985,227 @@ async function archiveTeacherFromModal() {
       await loadTeachers();
       renderTeachersTable();
     } else { toast(data.message || 'Could not archive.', 'error'); }
+  } catch (e) { toast('Connection error.', 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ROOMS
+// ═══════════════════════════════════════════════════════════════════════
+async function loadRooms() {
+  try {
+    const res = await fetch(withAuth(GAS_URL + '?action=getRooms'));
+    const data = await res.json();
+    if (data.status === 'ok') allRooms = data.rooms.filter(r => !r.archived);
+  } catch (e) { toast('Could not load rooms.', 'error'); }
+}
+
+function renderRoomsTable() {
+  const tbody = document.getElementById('roomsTbody');
+  const empty = document.getElementById('roomsEmpty');
+  tbody.innerHTML = '';
+  if (!allRooms.length) { empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  allRooms.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><b>${escapeHtml(r.roomName)}</b></td>
+      <td>${escapeHtml(r.campus || '—')}</td>
+      <td><span class="badge ${r.type === 'GC' ? '' : 'badge-muted'}">${escapeHtml(r.type)}</span></td>
+      <td class="row-actions"><button class="btn btn-ghost btn-sm" onclick="openRoomModal(${r.rowNo})">Edit</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function openRoomModal(rowNo) {
+  document.getElementById('rm_rowNo').value = rowNo || '';
+  document.getElementById('archiveRoomBtn').style.display = rowNo ? '' : 'none';
+  if (rowNo) {
+    const r = allRooms.find(x => x.rowNo === rowNo);
+    document.getElementById('roomModalTitle').textContent = 'Edit Room';
+    document.getElementById('rm_roomName').value = r.roomName || '';
+    document.getElementById('rm_campus').value = r.campus || '';
+    document.getElementById('rm_type').value = r.type || 'Regular';
+  } else {
+    document.getElementById('roomModalTitle').textContent = 'Add Room';
+    document.getElementById('rm_roomName').value = '';
+    document.getElementById('rm_campus').value = '';
+    document.getElementById('rm_type').value = 'Regular';
+  }
+  document.getElementById('roomModalOverlay').classList.add('open');
+}
+function closeRoomModal() { document.getElementById('roomModalOverlay').classList.remove('open'); }
+
+async function saveRoom() {
+  const rowNo = document.getElementById('rm_rowNo').value;
+  const roomName = document.getElementById('rm_roomName').value.trim();
+  if (!roomName) { toast('Please enter a room name.', 'error'); return; }
+  const payload = {
+    action: rowNo ? 'editRoom' : 'addRoom',
+    rowNo: rowNo || undefined,
+    roomName,
+    campus: document.getElementById('rm_campus').value,
+    type: document.getElementById('rm_type').value,
+  };
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload(payload)) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      toast('Room saved.', 'success');
+      closeRoomModal();
+      await loadRooms();
+      renderRoomsTable();
+    } else { toast(data.message || 'Could not save room.', 'error'); }
+  } catch (e) { toast('Connection error.', 'error'); }
+}
+
+async function archiveRoomFromModal() {
+  const rowNo = document.getElementById('rm_rowNo').value;
+  if (!rowNo) return;
+  if (!confirm('Archive this room?')) return;
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload({ action: 'archiveRoom', rowNo, archived: true })) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      toast('Room archived.', 'success');
+      closeRoomModal();
+      await loadRooms();
+      renderRoomsTable();
+    } else { toast(data.message || 'Could not archive.', 'error'); }
+  } catch (e) { toast('Connection error.', 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// COURSE CATALOG
+// ═══════════════════════════════════════════════════════════════════════
+async function loadCourses() {
+  try {
+    const res = await fetch(withAuth(GAS_URL + '?action=getCourses'));
+    const data = await res.json();
+    if (data.status === 'ok') allCourses = data.courses.filter(c => !c.archived);
+  } catch (e) { toast('Could not load courses.', 'error'); }
+}
+
+function renderCoursesTable() {
+  const tbody = document.getElementById('coursesTbody');
+  const empty = document.getElementById('coursesEmpty');
+  tbody.innerHTML = '';
+  if (!allCourses.length) { empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  allCourses.forEach(c => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><b>${escapeHtml(c.code)}</b></td>
+      <td>${c.category ? `<span class="badge">${escapeHtml(c.category)}</span>` : '<span class="badge-muted badge">—</span>'}</td>
+      <td>${escapeHtml(c.description || '—')}</td>
+      <td class="row-actions"><button class="btn btn-ghost btn-sm" onclick="openCourseModal(${c.rowNo})">Edit</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function openCourseModal(rowNo) {
+  document.getElementById('c_rowNo').value = rowNo || '';
+  document.getElementById('archiveCourseBtn').style.display = rowNo ? '' : 'none';
+  if (rowNo) {
+    const c = allCourses.find(x => x.rowNo === rowNo);
+    document.getElementById('courseModalTitle').textContent = 'Edit Course';
+    document.getElementById('c_code').value = c.code || '';
+    document.getElementById('c_category').value = c.category || '';
+    document.getElementById('c_description').value = c.description || '';
+  } else {
+    document.getElementById('courseModalTitle').textContent = 'Add Course';
+    document.getElementById('c_code').value = '';
+    document.getElementById('c_category').value = '';
+    document.getElementById('c_description').value = '';
+  }
+  document.getElementById('courseModalOverlay').classList.add('open');
+}
+function closeCourseModal() { document.getElementById('courseModalOverlay').classList.remove('open'); }
+
+async function saveCourse() {
+  const rowNo = document.getElementById('c_rowNo').value;
+  const code = document.getElementById('c_code').value.trim();
+  if (!code) { toast('Please enter a course code.', 'error'); return; }
+  const payload = {
+    action: rowNo ? 'editCourse' : 'addCourse',
+    rowNo: rowNo || undefined,
+    code,
+    category: document.getElementById('c_category').value,
+    description: document.getElementById('c_description').value.trim(),
+  };
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload(payload)) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      toast('Course saved.', 'success');
+      closeCourseModal();
+      await loadCourses();
+      renderCoursesTable();
+    } else { toast(data.message || 'Could not save course.', 'error'); }
+  } catch (e) { toast('Connection error.', 'error'); }
+}
+
+async function archiveCourseFromModal() {
+  const rowNo = document.getElementById('c_rowNo').value;
+  if (!rowNo) return;
+  if (!confirm('Archive this course?')) return;
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload({ action: 'archiveCourse', rowNo, archived: true })) });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      toast('Course archived.', 'success');
+      closeCourseModal();
+      await loadCourses();
+      renderCoursesTable();
+    } else { toast(data.message || 'Could not archive.', 'error'); }
+  } catch (e) { toast('Connection error.', 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PERIOD SETTINGS
+// ═══════════════════════════════════════════════════════════════════════
+async function loadPeriodSettings() {
+  try {
+    const res = await fetch(withAuth(GAS_URL + '?action=getPeriodSettings'));
+    const data = await res.json();
+    if (data.status === 'ok') periodSettings = data.periods;
+  } catch (e) { toast('Could not load period settings.', 'error'); }
+}
+
+function renderPeriodsTable() {
+  const tbody = document.getElementById('periodsTbody');
+  tbody.innerHTML = periodSettings.map((p, i) => `
+    <tr>
+      <td><input type="text" value="${escapeHtml(p.label)}" style="width:90px; height:32px; border:1.5px solid var(--border); border-radius:6px; padding:0 8px; font-family:inherit;" onchange="updatePeriodField(${i}, 'label', this.value)"></td>
+      <td><input type="time" value="${p.start}" style="height:32px; border:1.5px solid var(--border); border-radius:6px; padding:0 8px; font-family:inherit;" onchange="updatePeriodField(${i}, 'start', this.value)"></td>
+      <td><input type="time" value="${p.end}" style="height:32px; border:1.5px solid var(--border); border-radius:6px; padding:0 8px; font-family:inherit;" onchange="updatePeriodField(${i}, 'end', this.value)"></td>
+      <td>
+        <select style="height:32px; border:1.5px solid var(--border); border-radius:6px; font-family:inherit;" onchange="updatePeriodField(${i}, 'type', this.value)">
+          <option value="class" ${p.type === 'class' ? 'selected' : ''}>Class</option>
+          <option value="break" ${p.type === 'break' ? 'selected' : ''}>Break</option>
+        </select>
+      </td>
+      <td><button class="btn btn-ghost btn-sm" onclick="removePeriodRow(${i})">✕</button></td>
+    </tr>
+  `).join('');
+}
+function updatePeriodField(i, field, value) { periodSettings[i][field] = value; }
+function addPeriodRow() {
+  periodSettings.push({ id: 'p' + Date.now(), label: 'New', start: '08:00', end: '08:50', type: 'class' });
+  renderPeriodsTable();
+}
+function removePeriodRow(i) {
+  periodSettings.splice(i, 1);
+  renderPeriodsTable();
+}
+async function savePeriodSettings() {
+  if (!periodSettings.length) { toast('Add at least one period first.', 'error'); return; }
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(withAuthPayload({ action: 'savePeriodSettings', periods: periodSettings })) });
+    const data = await res.json();
+    if (data.status === 'ok') toast('Period settings saved.', 'success');
+    else toast(data.message || 'Could not save.', 'error');
   } catch (e) { toast('Connection error.', 'error'); }
 }
 
